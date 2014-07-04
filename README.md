@@ -10,8 +10,6 @@ django-scraper
 * Store and prevent duplication of downloaded content
 * Support HTTP, HTTPS proxies.
 
-----
-
 Installation
 ------------
 This application requires some other tools installed first:
@@ -80,3 +78,6 @@ or under console, by running management command `run_scraper`:
     python manage.py run_scraper
     
 With this command, all active sources inside current Django instance will be processed consecutively.
+
+--
+*For further information, issues, or any questions regarding this, please email to me[at]zniper.net*
