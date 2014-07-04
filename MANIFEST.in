@@ -1,0 +1,3 @@
+include LICENSE
+include README.md
+recursive-include scraper *.html *.png *.gif *js *jpg *jpeg *svg *py
