@@ -9,11 +9,11 @@ except ImportError:
 version = scraper.__version__
 
 setup(
-    name='DjangoScraper',
+    name='django-scraper',
     version=version,
     description='Django application which crawls and downloads online content'
-                'following instructions',
-    long_description=open('README.md').read(),
+                ' following instructions',
+    long_description=open('README.rst').read(),
     license='The MIT License (MIT)',
     url='https://github.com/zniper/django-scraper',
     author='Ha Pham',
