@@ -43,7 +43,6 @@ class Extractor(object):
         """ Return hashed value and etree object of target page """
         response = requests.get(url, headers=self.headers, proxies=self.proxies)
         hash_value = sha1(url).hexdigest()
-        print response.content
         return hash_value, etree.HTML(response.content)
 
     def set_location(self, location=''):
@@ -168,13 +167,19 @@ class Extractor(object):
         while lives:
             try:
                 lives -= 1
-                response = requests.get(file_url, proxies=self.proxies)
+                response = requests.get(file_url, headers=self.headers,
+                                        proxies=self.proxies)
+                if response.status_code == 200:
+                    file_path = self.get_path(file_name)
+                    with open(file_path, 'wb') as bfile:
+                        bfile.write(response.content)
+                    return file_name
+                else:
+                    logger.error('Error [%d] downloading %s' % (
+                        response.status_code, url))
             except requests.ConnectionError:
                 logger.error('Retry downloading file %s' % file_url)
-        file_path = self.get_path(file_name)
-        with open(file_path, 'wb') as bfile:
-            bfile.write(response.content)
-        return file_name
+        return None
 
     def refine_content(self, content, custom_rules=None):
         """ rules should adapt formats:

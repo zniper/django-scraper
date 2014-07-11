@@ -29,9 +29,12 @@ class Source(models.Model):
     meta_xpath = models.TextField(default='', blank=True)
     extra_xpath = models.TextField(default='', blank=True)
     refine_rules = models.TextField(default='', blank=True)
-    black_words = models.ForeignKey('WordSet', blank=True, null=True)
     active = models.BooleanField(default=True)
     download_image = models.BooleanField(default=True)
+    # Extra settings
+    black_words = models.ForeignKey('WordSet', blank=True, null=True)
+    proxy = models.ForeignKey('ProxyServer', blank=True, null=True)
+    user_agent = models.ForeignKey('UserAgent', blank=True, null=True)
 
     def __unicode__(self):
         return 'Source: %s' % self.name
@@ -46,10 +49,19 @@ class Source(models.Model):
                  if item.strip()]
         extrapath = [item.strip() for item in self.extra_xpath.split('\n')
                      if item.strip()]
-        proxies = getattr(settings, 'PROXIES', None)
-        ua = getattr(settings, 'USER_AGENT', None)
+        proxy = {}
+        if self.proxy:
+            logger.info('Use proxy server: %s' % self.proxy.address)
+            proxy = self.proxy.get_dict()
+        else:
+            proxy = None
+        if self.user_agent:
+            logger.info('Use user agent: %s' % self.user_agent.name)
+            ua = self.user_agent.value
+        else:
+            ua = None
         extractor = Extractor(self.url, settings.CRAWL_ROOT, 
-                              proxies=proxies, user_agent=ua)
+                              proxies=proxy, user_agent=ua)
         all_links = extractor.extract_links(
             xpath=self.link_xpath,
             expand_rules=self.expand_rules.split('\n'),
@@ -69,7 +81,7 @@ class Source(models.Model):
                     logger.info('Download %s' % link_url)
                     location = datetime.now().strftime('%Y/%m/%d')
                     location = os.path.join(settings.CRAWL_ROOT, location)
-                    sub_extr = Extractor(link_url, location, settings.PROXIES)
+                    sub_extr = Extractor(link_url, location, proxy)
                     if self.content_type:
                         base_meta = {'type': self.content_type.name}
                     else:
@@ -134,7 +146,29 @@ class ContentType(models.Model):
         return 'Type: %s' % self.name
 
 
-#class UserAgent(models.Model):
-#    """ Define a specific user agent for being used in Source """
-#    name = models.CharField(max_length=64)
-#    value = models.TextField(_('User Agent String'), blank=True, null=True)
+class UserAgent(models.Model):
+    """ Define a specific user agent for being used in Source """
+    name = models.CharField(_('UA Name'), max_length=64)
+    value = models.CharField(_('User Agent String'), max_length=256)
+
+    def __unicode__(self):
+        return 'User Agent: %s' % self.name
+
+
+class ProxyServer(models.Model):
+    """ Stores information of proxy server """
+    PROTOCOLS = (
+        ('http', 'HTTP'),
+        ('https', 'HTTPS'),
+    )
+    name = models.CharField(_('Proxy Server Name'), max_length=64)
+    address = models.CharField(_('Address'), max_length=128)
+    port = models.IntegerField(_('Port'))
+    protocol = models.CharField(_('Protocol'), choices=PROTOCOLS,
+                                max_length=16)
+
+    def get_dict(self):
+        return {self.protocol: '%s:%d' % (self.address, self.port)}
+
+    def __unicode__(self):
+        return 'Proxy Server: %s' % self.name
