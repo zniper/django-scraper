@@ -1,11 +1,15 @@
-**django-scraper** is a Django application which crawls and downloads online content following configurable instructions.
+Features
+========
 
 * Extract content of given online websites/pages using XPath queries.
+* Process can be started from command line (~cron job) or inside Django code 
+* Can be called from command line (~cron job) or inside Django code 
 * Automatically browse and download content in related pages, with given depth.
 * Support metadata extract along with other content
 * Have content refinement rules and black words filtering
 * Store and prevent duplication of downloaded content
-* Support HTTP, HTTPS proxies.
+* Allow changing User Agent
+* Support proxy servers
 
 Documentation
 =============
@@ -14,4 +18,4 @@ The full documentation is not ready yet, please go here for notes about installa
 
 Support
 =======
-If you have any questions or any ideas regarding this application, please email to *me[at]zniper.net*
+If you have any questions about this application, please email to *me[at]zniper.net*

@@ -4,6 +4,7 @@ django-scraper
 **django-scraper** is a Django application which crawls and downloads online content following configurable instructions.
 
 * Extract content of given online websites/pages using XPath queries.
+* Process can be started from command line (~cron job) or inside Django code 
 * Automatically browse and download content in related pages, with given depth.
 * Support metadata extract along with other content
 * Have content refinement rules and black words filtering
@@ -30,8 +31,16 @@ In order to use **django-scraper**, it should be put into `Django` settings as i
         ...
         'scraper',
     )
+
+If `south` is present in current Django project, please use `migrate` command to create database tables. 
+  
+    python manage.py migrate scraper
+
+Otherwise, please use standard 'syncdb' command
+
+    python manage.py syncdb
     
-There are also some important configuration values should be added into settings file:
+There is also an important configuration value should be added into settings file:
 
     CRAW_ROOT = '/path/to/local/storage'
     
