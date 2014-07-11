@@ -28,18 +28,22 @@ refine_rules = [
 class Extractor(object):
     url = ''
     hash_value = ''
+    headers = {}
 
-    def __init__(self, url, base_dir='', proxies=None):
+    def __init__(self, url, base_dir='', proxies=None, user_agent=None):
         self.url = url
         self.proxies = proxies
+        if user_agent:
+            self.headers['User-Agent'] = user_agent 
         self.base_dir = base_dir
         self.hash_value, self.root = self.parse_content(url)
         self.set_location(self.hash_value)
 
     def parse_content(self, url=''):
         """ Return hashed value and etree object of target page """
-        response = requests.get(url)
+        response = requests.get(url, headers=self.headers, proxies=self.proxies)
         hash_value = sha1(url).hexdigest()
+        print response.content
         return hash_value, etree.HTML(response.content)
 
     def set_location(self, location=''):
@@ -47,7 +51,7 @@ class Extractor(object):
 
     def extract_links(self, xpath, expand_rules=None, depth=1):
         all_links = []
-
+        
         # First, crawl all links in the current page
         elements = self.root.xpath(xpath)
         for el in elements:
@@ -119,6 +123,7 @@ class Extractor(object):
                 content = content.replace(ipath, file_name)
                 meta = {'caption': ''.join(el.xpath('@alt'))}
                 images_meta.append((file_name, meta))
+                print '  ' + os.path.basename(file_name)
         metadata['images'] = images_meta
 
         # Download extra content

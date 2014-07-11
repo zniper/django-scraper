@@ -5,6 +5,7 @@ from datetime import datetime
 
 from django.db import models
 from django.conf import settings
+from django.utils.translation import ugettext_lazy as _
 
 from utils import Extractor
 
@@ -45,8 +46,10 @@ class Source(models.Model):
                  if item.strip()]
         extrapath = [item.strip() for item in self.extra_xpath.split('\n')
                      if item.strip()]
-
-        extractor = Extractor(self.url, settings.CRAWL_ROOT)
+        proxies = getattr(settings, 'PROXIES', None)
+        ua = getattr(settings, 'USER_AGENT', None)
+        extractor = Extractor(self.url, settings.CRAWL_ROOT, 
+                              proxies=proxies, user_agent=ua)
         all_links = extractor.extract_links(
             xpath=self.link_xpath,
             expand_rules=self.expand_rules.split('\n'),
@@ -129,3 +132,9 @@ class ContentType(models.Model):
 
     def __unicode__(self):
         return 'Type: %s' % self.name
+
+
+#class UserAgent(models.Model):
+#    """ Define a specific user agent for being used in Source """
+#    name = models.CharField(max_length=64)
+#    value = models.TextField(_('User Agent String'), blank=True, null=True)
