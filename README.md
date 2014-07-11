@@ -8,7 +8,8 @@ django-scraper
 * Support metadata extract along with other content
 * Have content refinement rules and black words filtering
 * Store and prevent duplication of downloaded content
-* Support HTTP, HTTPS proxies.
+* Allow changing User Agent
+* Support proxy servers
 
 Installation
 ------------
@@ -33,10 +34,6 @@ In order to use **django-scraper**, it should be put into `Django` settings as i
 There are also some important configuration values should be added into settings file:
 
     CRAW_ROOT = '/path/to/local/storage'
-    PROXIES = {
-        'http': 'sample_proxy:80',
-        'https': sample_proxy:8080'
-    }
     
 Usage
 -----
@@ -65,9 +62,11 @@ To start using the application, you should create new `Source` object via admin 
         <div class="tags".*$
         <br/?>
 
-* `black words` - Select set of words, a content will not be downloaded if containing one of those words
 * `active` - Determine if this `source` will run or not
 * `download image` - Check this to download all images present inside the specified content
+* `black words` - Select set of words, a content will not be downloaded if containing one of those words
+* `proxy` - Proxy server will be used when crawling current source
+* `user agent` - User Agent value set in the header of every requests
 
 After being saved, the `source` object will run a scraping session by calling crawl() method:
 

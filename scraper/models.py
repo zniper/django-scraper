@@ -168,7 +168,8 @@ class ProxyServer(models.Model):
                                 max_length=16)
 
     def get_dict(self):
-        return {self.protocol: '%s:%d' % (self.address, self.port)}
+        return {self.protocol: '%s://%s:%d' % (
+            self.protocol, self.address, self.port)}
 
     def __unicode__(self):
         return 'Proxy Server: %s' % self.name
