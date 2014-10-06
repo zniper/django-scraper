@@ -2,6 +2,7 @@ import os
 import logging
 
 from datetime import datetime
+from shutil import rmtree
 
 from django.db import models
 from django.conf import settings
@@ -116,6 +117,13 @@ class LocalContent(models.Model):
 
     def __unicode__(self):
         return 'Local Content: %s' % self.url
+
+    def remove_files(self):
+        rmtree(self.local_path)
+
+    def delete(self, **kwargs):
+        self.remove_files()
+        super(LocalContent, self).delete(**kwargs)
 
 
 class WordSet(models.Model):
