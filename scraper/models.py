@@ -114,12 +114,20 @@ class LocalContent(models.Model):
     local_path = models.CharField(max_length=256)
     created_time = models.DateTimeField(default=datetime.now,
                                         blank=True, null=True)
+    state = models.IntegerField(default=0)
 
     def __unicode__(self):
         return 'Local Content: %s' % self.url
 
     def remove_files(self):
-        rmtree(self.local_path)
+        self.fresh = False
+        try:
+            rmtree(self.local_path)
+        except OSError:
+            pass
+        self.local_path = ''
+        self.state = 1
+        self.save()
 
     def delete(self, **kwargs):
         self.remove_files()
