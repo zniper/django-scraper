@@ -34,7 +34,7 @@ class Extractor(object):
         self.url = url
         self.proxies = proxies
         if user_agent:
-            self.headers['User-Agent'] = user_agent 
+            self.headers['User-Agent'] = user_agent
         self.base_dir = base_dir
         self.hash_value, self.root = self.parse_content(url)
         self.set_location(self.hash_value)
@@ -43,19 +43,21 @@ class Extractor(object):
         """ Return hashed value and etree object of target page """
         response = requests.get(url, headers=self.headers, proxies=self.proxies)
         hash_value = sha1(url).hexdigest()
+
         return hash_value, etree.HTML(response.content)
 
     def set_location(self, location=''):
         self.download_to = os.path.join(self.base_dir, location)
 
-    def extract_links(self, xpath, expand_rules=None, depth=1):
+    def extract_links(self, xpath, expand_rules=None, depth=1, make_root=False):
         all_links = []
-        
+
         # First, crawl all links in the current page
         elements = self.root.xpath(xpath)
         for el in elements:
+            href = el.get('href') if not make_root else '/'+el.get('href')
             all_links.append({
-                'url': self.complete_url(el.get('href')),
+                'url': self.complete_url(href),
                 'text': el.text,
                 })
 
@@ -66,13 +68,14 @@ class Extractor(object):
                     url = self.complete_url(path)
                     sub_extractor = Extractor(url)
                     sub_links = sub_extractor.extract_links(
-                        xpath, expand_rules, depth-1)
+                        xpath, expand_rules, depth-1, make_root)
                     all_links.extend(sub_links)
 
         return all_links
 
     def complete_url(self, path):
         if path.strip().lower()[:7] != 'http://':
+            print path
             path = urljoin(self.url, path)
         return path
 
@@ -98,6 +101,7 @@ class Extractor(object):
 
         # Create dir and download HTML content
         self.prepare_directory()
+
         content = etree.tostring(self.root.xpath(xpath)[0], pretty_print=True)
         content = self.refine_content(content, custom_rules=custom_rules)
         node = etree.HTML(content)
