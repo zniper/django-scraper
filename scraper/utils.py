@@ -48,7 +48,7 @@ class Extractor(object):
                                     headers=self.headers,
                                     proxies=self.proxies)
             content = response.content
-        except (InvalidSchema, MissingSchema) as e:
+        except (InvalidSchema, MissingSchema):
             with open(self.url, 'r') as target:
                 content = target.read()
         hash_value = sha1(self.url).hexdigest()
