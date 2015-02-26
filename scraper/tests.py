@@ -10,13 +10,14 @@ DATA_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                         'test_data')
 
 
-#def start_local_site(path=''):
-#    """ Just a simple local site for testing HTTP requests """
-#    PORT = 8000
-#    handler = SimpleHTTPServer.SimpleHTTPRequestHandler
-#    httpd = SocketServer.TCPServer(('', PORT), handler)
-#    print 'Local test server is up at', PORT
-#    httpd.serve_forever()
+# For future use, with real web server
+# def start_local_site(path=''):
+#     """ Just a simple local site for testing HTTP requests """
+#     PORT = 8000
+#     handler = SimpleHTTPServer.SimpleHTTPRequestHandler
+#     httpd = SocketServer.TCPServer(('', PORT), handler)
+#     print 'Local test server is up at', PORT
+#     httpd.serve_forever()
 
 
 def get_path(file_name):

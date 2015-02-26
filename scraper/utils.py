@@ -58,7 +58,8 @@ class Extractor(object):
     def set_location(self, location=''):
         self.download_to = os.path.join(self.base_dir, location)
 
-    def extract_links(self, xpath, expand_rules=None, depth=1, make_root=False):
+    def extract_links(self, xpath, expand_rules=None, depth=1,
+                      make_root=False):
         all_links = []
 
         # First, crawl all links in the current page
