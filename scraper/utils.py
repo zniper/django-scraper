@@ -4,6 +4,7 @@ import re
 import json
 import logging
 
+from requests.exceptions import InvalidSchema, MissingSchema
 from lxml import etree
 from urlparse import urljoin
 from shutil import rmtree
@@ -36,15 +37,23 @@ class Extractor(object):
         if user_agent:
             self.headers['User-Agent'] = user_agent
         self.base_dir = base_dir
-        self.hash_value, self.root = self.parse_content(url)
+        self.hash_value, self.root = self.parse_content()
         self.set_location(self.hash_value)
 
-    def parse_content(self, url=''):
+    def parse_content(self):
         """ Return hashed value and etree object of target page """
-        response = requests.get(url, headers=self.headers, proxies=self.proxies)
-        hash_value = sha1(url).hexdigest()
+        content = ''
+        try:
+            response = requests.get(self.url,
+                                    headers=self.headers,
+                                    proxies=self.proxies)
+            content = response.content
+        except (InvalidSchema, MissingSchema) as e:
+            with open(self.url, 'r') as target:
+                content = target.read()
+        hash_value = sha1(self.url).hexdigest()
 
-        return hash_value, etree.HTML(response.content)
+        return hash_value, etree.HTML(content)
 
     def set_location(self, location=''):
         self.download_to = os.path.join(self.base_dir, location)
@@ -75,7 +84,6 @@ class Extractor(object):
 
     def complete_url(self, path):
         if path.strip().lower()[:7] != 'http://':
-            print path
             path = urljoin(self.url, path)
         return path
 

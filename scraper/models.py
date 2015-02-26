@@ -61,12 +61,12 @@ class Source(models.Model):
             ua = self.user_agent.value
         else:
             ua = None
-        extractor = Extractor(self.url, settings.CRAWL_ROOT, 
+        extractor = Extractor(self.url, settings.CRAWL_ROOT,
                               proxies=proxy, user_agent=ua)
         make_root = False
         if self.link_xpath.startswith('/+'):
             make_root = True
-            self.link_xpath = self.link_xpath[2:] 
+            self.link_xpath = self.link_xpath[2:]
         all_links = extractor.extract_links(
             xpath=self.link_xpath,
             expand_rules=self.expand_rules.split('\n'),
@@ -81,7 +81,6 @@ class Source(models.Model):
             for link in all_links:
                 try:
                     link_url = link['url']
-                    print link_url
                     if LocalContent.objects.filter(url=link_url).count():
                         logger.info('Bypass %s' % link_url)
                         continue
