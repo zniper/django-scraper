@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+    <meta charset='utf-8'>
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <meta name="description" content="django-scraper : Django application which crawls and downloads online content following instructions">
+
+    <link rel="stylesheet" type="text/css" media="screen" href="stylesheets/stylesheet.css">
+
+    <title>django-scraper</title>
+  </head>
+
+  <body>
+
+    <!-- HEADER -->
+    <div id="header_wrap" class="outer">
+        <header class="inner">
+          <a id="forkme_banner" href="https://github.com/zniper/django-scraper">View on GitHub</a>
+
+          <h1 id="project_title">django-scraper</h1>
+          <h2 id="project_tagline">Django application which crawls and downloads online content following instructions</h2>
+
+            <section id="downloads">
+              <a class="zip_download_link" href="https://github.com/zniper/django-scraper/zipball/master">Download this project as a .zip file</a>
+              <a class="tar_download_link" href="https://github.com/zniper/django-scraper/tarball/master">Download this project as a tar.gz file</a>
+            </section>
+        </header>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <div id="main_content_wrap" class="outer">
+      <section id="main_content" class="inner">
+        <h1>
+<a id="django-scraper" class="anchor" href="#django-scraper" aria-hidden="true"><span class="octicon octicon-link"></span></a>django-scraper</h1>
+
+<p><a href="https://travis-ci.org/zniper/django-scraper"><img src="https://travis-ci.org/zniper/django-scraper.svg" alt="Build Status"></a>
+<a href="https://coveralls.io/r/zniper/django-scraper?branch=master"><img src="https://coveralls.io/repos/zniper/django-scraper/badge.svg?branch=master" alt="Coverage Status"></a>
+<a href="https://pypi.python.org/pypi/django-scraper/"><img src="https://pypip.in/version/django-scraper/badge.svg" alt="Latest Version"></a></p>
+
+<p><strong>django-scraper</strong> is a Django application which crawls and downloads online content following configurable instructions.</p>
+
+<ul>
+<li>Extract content of given online websites/pages using XPath queries.</li>
+<li>Process can be started from command line (~cron job) or inside Django code </li>
+<li>Automatically browse and download content in related pages, with given depth.</li>
+<li>Support metadata extract along with other content</li>
+<li>Have content refinement rules and black words filtering</li>
+<li>Store and prevent duplication of downloaded content</li>
+<li>Allow changing User Agent</li>
+<li>Support proxy servers</li>
+</ul>
+
+<h2>
+<a id="installation" class="anchor" href="#installation" aria-hidden="true"><span class="octicon octicon-link"></span></a>Installation</h2>
+
+<p>This application requires some other tools installed first:</p>
+
+<pre><code>lxml
+requests
+</code></pre>
+
+<p><strong>django-scraper</strong> installation can be made using <code>pip</code>:</p>
+
+<pre><code>pip install django-scraper
+</code></pre>
+
+<h2>
+<a id="configuration" class="anchor" href="#configuration" aria-hidden="true"><span class="octicon octicon-link"></span></a>Configuration</h2>
+
+<p>In order to use <strong>django-scraper</strong>, it should be put into <code>Django</code> settings as installed application.</p>
+
+<pre><code>INSTALLED_APPS = (
+    ...
+    'scraper',
+)
+</code></pre>
+
+<p>If <code>south</code> is present in current Django project, please use <code>migrate</code> command to create database tables. </p>
+
+<pre><code>python manage.py migrate scraper
+</code></pre>
+
+<p>Otherwise, please use standard 'syncdb' command</p>
+
+<pre><code>python manage.py syncdb
+</code></pre>
+
+<p>There is also an important configuration value should be added into settings file:</p>
+
+<pre><code>CRAW_ROOT = '/path/to/local/storage'
+</code></pre>
+
+<h2>
+<a id="usage" class="anchor" href="#usage" aria-hidden="true"><span class="octicon octicon-link"></span></a>Usage</h2>
+
+<p>To start using the application, you should create new <code>Source</code> object via admin interface. There, please enter following information:</p>
+
+<ul>
+<li>
+<code>url</code> - URL to the start page of <code>source</code> (website, entry list,...)</li>
+<li>
+<code>name</code> - Name of the source</li>
+<li>
+<code>link xpath</code> - XPATH to links of main content page (entries, articles,...)</li>
+<li>
+<code>expand rules</code> - XPATH to url values of next scraping session ~ higher depth</li>
+<li>
+<code>crawl depth</code> - Max depth of scraping session. This relates to expand rules</li>
+<li>
+<code>content xpath</code> - XPATH to the target value of content page (article body,...)</li>
+<li>
+<code>content type</code> - Type of the current <code>source</code>
+</li>
+<li>
+<p><code>meta xpath</code> - Python dictionary of meta-data information will extracted along the main content</p>
+
+<p><em>Example:</em></p>
+
+<pre><code>{
+    'title': '//h1[@class="title"]/text()',
+    'keywords': 'keywords': '//meta[@name="keywords"]/@content',
+}
+</code></pre>
+</li>
+<li>
+<code>extra xpath</code> - XPATH to additional content that will be downloaded (PDF files, video clips,...)</li>
+<li>
+<p><code>refine rules</code> - List of regular expressions will be applied to content to remove redundant data. Each regex stays in one different line.</p>
+
+<p><em>Example:</em></p>
+
+<pre><code>&lt;div class="tags".*$
+&lt;br/?&gt;
+</code></pre>
+</li>
+<li><p><code>active</code> - Determine if this <code>source</code> will run or not</p></li>
+<li>
+<code>download image</code> - Check this to download all images present inside the specified content</li>
+<li>
+<code>black words</code> - Select set of words, a content will not be downloaded if containing one of those words</li>
+<li>
+<code>proxy</code> - Proxy server will be used when crawling current source</li>
+<li>
+<code>user agent</code> - User Agent value set in the header of every requests</li>
+</ul>
+
+<p>After being saved, the <code>source</code> object will run a scraping session by calling crawl() method:</p>
+
+<pre><code>source_object.crawl()
+</code></pre>
+
+<p>or under console, by running management command <code>run_scraper</code>:</p>
+
+<pre><code>python manage.py run_scraper
+</code></pre>
+
+<p>With this command, all active sources inside current Django instance will be processed consecutively.</p>
+
+<h2></h2>
+
+<p><em>For further information, issues, or any questions regarding this, please email to me[at]zniper.net</em></p>
+      </section>
+    </div>
+
+    <!-- FOOTER  -->
+    <div id="footer_wrap" class="outer">
+      <footer class="inner">
+        <p class="copyright">django-scraper maintained by <a href="https://github.com/zniper">zniper</a></p>
+        <p>Published with <a href="http://pages.github.com">GitHub Pages</a></p>
+      </footer>
+    </div>
+
+    
+
+  </body>
+</html>
