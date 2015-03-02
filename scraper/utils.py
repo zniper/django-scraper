@@ -151,7 +151,6 @@ class Extractor(object):
                 content = content.replace(ipath, file_name)
                 meta = {'caption': ''.join(el.xpath('@alt'))}
                 images_meta.append((file_name, meta))
-                #print '  ' + os.path.basename(file_name)
         metadata['images'] = images_meta
 
         # Download extra content
