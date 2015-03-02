@@ -176,12 +176,14 @@ class UserAgent(models.Model):
         return 'User Agent: %s' % self.name
 
 
+PROTOCOLS = (
+    ('http', 'HTTP'),
+    ('https', 'HTTPS'),
+)
+
+
 class ProxyServer(models.Model):
     """ Stores information of proxy server """
-    PROTOCOLS = (
-        ('http', 'HTTP'),
-        ('https', 'HTTPS'),
-    )
     name = models.CharField(_('Proxy Server Name'), max_length=64)
     address = models.CharField(_('Address'), max_length=128)
     port = models.IntegerField(_('Port'))

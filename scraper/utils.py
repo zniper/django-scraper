@@ -27,12 +27,12 @@ refine_rules = [
 
 
 class Extractor(object):
-    url = ''
-    hash_value = ''
+    _url = ''
+    _hash_value = ''
     headers = {}
 
     def __init__(self, url, base_dir='', proxies=None, user_agent=None):
-        self.url = url
+        self._url = url
         self.proxies = proxies
         if user_agent:
             self.headers['User-Agent'] = user_agent
@@ -44,21 +44,21 @@ class Extractor(object):
         """ Return hashed value and etree object of target page """
         content = ''
         try:
-            response = requests.get(self.url,
+            response = requests.get(self._url,
                                     headers=self.headers,
                                     proxies=self.proxies)
             content = response.content
         except (InvalidSchema, MissingSchema):
-            with open(self.url, 'r') as target:
+            with open(self._url, 'r') as target:
                 content = target.read()
-        hash_value = sha1(self.url).hexdigest()
+        hash_value = sha1(self._url).hexdigest()
 
         return hash_value, etree.HTML(content)
 
     def set_location(self, location=''):
         self.download_to = os.path.join(self.base_dir, location)
 
-    def extract_links(self, xpath, expand_rules=None, depth=1,
+    def extract_links(self, xpath='//a', expand_rules=None, depth=1,
                       make_root=False):
         all_links = []
 
@@ -85,7 +85,7 @@ class Extractor(object):
 
     def complete_url(self, path):
         if path.strip().lower()[:7] != 'http://':
-            path = urljoin(self.url, path)
+            path = urljoin(self._url, path)
         return path
 
     def extract_content(self, xpath, with_image=True, metapath=None,
@@ -100,7 +100,7 @@ class Extractor(object):
         # Extract metadata
         base_meta = {
             'hash': self.hash_value,
-            'url': self.url,
+            'url': self._url,
             }
         metadata = metadata or {}
         metadata.update(base_meta)
@@ -171,11 +171,11 @@ class Extractor(object):
             os.makedirs(self.download_to)
 
     def download_file(self, url):
-        """ Download image from given url and save to common location """
+        """ Download file from given url and save to common location """
         file_url = url.strip()
         file_name = url.split('/')[-1].split('?')[0]
         if file_url.lower().find('http://') == -1:
-            file_url = urljoin(self.url, file_url)
+            file_url = urljoin(self._url, file_url)
         lives = 3
         while lives:
             try:

@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html class='no-js'>
+<head>
+<title>
+Y Combinator Posthaven
+</title>
+
+<script src="//posthaven-assets.s3.amazonaws.com/assets/modernizr.custom-1c2b9226ae724b41504ca414e3a385d5.js" type="text/javascript"></script>
+<meta content="authenticity_token" name="csrf-param" />
+<meta content="ErEmCUDjp5VwkMUJdsrDp8uDP3Dn841KEqI8f3Xw1cw=" name="csrf-token" />
+<meta content='width=device-width,initial-scale=1' name='viewport'>
+<meta content='Y Combinator Posthaven' property='og:title'>
+<meta content='website' property='og:type'>
+<meta content='http://blog.ycombinator.com/' property='og:url'>
+<meta content='Y Combinator Posthaven' property='og:site_name'>
+<meta content='' property='og:description'>
+<meta content='https://phaven-prod.s3.amazonaws.com/files/image_part/asset/1350469/IUv7uc_mwyXKqkpiLgXdk-dvqFE/large_shiftmessenger.jpg' property='og:image'>
+<meta content='738' property='og:image:width'>
+<meta content='385' property='og:image:height'>
+<meta content='https://phaven-prod.s3.amazonaws.com/files/image_part/asset/1350426/JjgrfQrzNYDGcxRoveHFXPwVcF0/large_cockpit.png' property='og:image'>
+<meta content='601' property='og:image:width'>
+<meta content='341' property='og:image:height'>
+<meta content='https://phaven-prod.s3.amazonaws.com/files/image_part/asset/1349770/r5Y0uuujUBqIrnp5pjKJcswBWVI/large_4421990486_37247437fa_z.jpg' property='og:image'>
+<meta content='640' property='og:image:width'>
+<meta content='418' property='og:image:height'>
+<meta content='https://phaven-prod.s3.amazonaws.com/files/image_part/asset/1349680/7OBe1d6JusM_2rEUH7e5XEbxQu0/large_screen-shot-2015-02-24-at-9-44-58-am.png' property='og:image'>
+<meta content='738' property='og:image:width'>
+<meta content='341' property='og:image:height'>
+<meta content='https://phaven-prod.s3.amazonaws.com/files/image_part/asset/1349639/BSLJEbIOlGzMd4kBRPHKe2ut4hg/large_saurabh.jpg' property='og:image'>
+<meta content='738' property='og:image:width'>
+<meta content='420' property='og:image:height'>
+<meta content='https://phaven-prod.s3.amazonaws.com/files/image_part/asset/1349031/opYYcDh_k_XDtvhjodqXhHK4Pec/large_unnamed4.jpg' property='og:image'>
+<meta content='738' property='og:image:width'>
+<meta content='554' property='og:image:height'>
+<meta content='https://phaven-prod.s3.amazonaws.com/files/image_part/asset/1348967/H9UsecCu-6l2Y1MQ7CtDxo6GV5A/large_shutterstock_141354709.jpg' property='og:image'>
+<meta content='738' property='og:image:width'>
+<meta content='492' property='og:image:height'>
+<meta content='https://phaven-prod.s3.amazonaws.com/files/image_part/asset/1348886/Ejka2NZc8iHYKAVM9uVjUNED4m8/large_2015-jan-yc3.jpg' property='og:image'>
+<meta content='780' property='og:image:width'>
+<meta content='520' property='og:image:height'>
+<meta content='https://phaven-prod.s3.amazonaws.com/files/image_part/asset/1348880/KED01VQYr2Dah5cCLhDAagfUsZI/large_nextravel.png' property='og:image'>
+<meta content='738' property='og:image:width'>
+<meta content='341' property='og:image:height'>
+<meta content='https://phaven-prod.s3.amazonaws.com/files/profile_pic/asset/1095067/z1Mvfb6GiEa405SoRjHKSEd4hFw/large_logo2000.png' property='og:image'>
+<meta content='200' property='og:image:width'>
+<meta content='200' property='og:image:height'>
+<meta content='gallery' property='twitter:card'>
+<meta content='https://phaven-prod.s3.amazonaws.com/files/image_part/asset/1350469/IUv7uc_mwyXKqkpiLgXdk-dvqFE/large_shiftmessenger.jpg' property='twitter:image0'>
+<meta content='https://phaven-prod.s3.amazonaws.com/files/image_part/asset/1350426/JjgrfQrzNYDGcxRoveHFXPwVcF0/large_cockpit.png' property='twitter:image1'>
+<meta content='https://phaven-prod.s3.amazonaws.com/files/image_part/asset/1349770/r5Y0uuujUBqIrnp5pjKJcswBWVI/large_4421990486_37247437fa_z.jpg' property='twitter:image2'>
+
+<link href="/posts.atom" rel="alternate" title="ATOM" type="application/atom+xml" />
+<link href='/favicon.ico' rel='shortcut icon' type='image/x-icon'>
+<link href="//fonts.googleapis.com/css?family=Oxygen:400,700,300|Crimson+Text:400,400italic&amp;subset=latin,latin-ext" media="screen" rel="stylesheet" type="text/css" />
+<link href="//posthaven-assets.s3.amazonaws.com/assets/blog-216cd592f9aba3e6ae098e40e5c2a6b5.css" media="screen" rel="stylesheet" type="text/css" />
+<style> 
+  <script>
+      var _roost = _roost || [];
+      _roost.push(['appkey','aa87cbfa247e49e4849c54a93bcca585']);
+  
+      !function(d,s,id){
+          var js, fjs = d.getElementsByTagName(s)[0];
+          if(!d.getElementById(id)){
+              js=d.createElement(s); js.id=id;
+              js.src='//get.roost.me/js/roost.js';
+              fjs.parentNode.insertBefore(js,fjs);
+          }
+      }(document, 'script', 'roost-js');
+  </script>
+</style>
+
+</head>
+<body id='site_798'>
+<div id="fb-root"></div>
+<script>(function(d, s, id) {
+  var js, fjs = d.getElementsByTagName(s)[0];
+  if (d.getElementById(id)) return;
+  js = d.createElement(s); js.id = id;
+  js.src = "//connect.facebook.net/en_US/all.js#xfbml=1&appId=488600357843531";
+  fjs.parentNode.insertBefore(js, fjs);
+}(document, 'script', 'facebook-jssdk'));</script>
+<div class="posthaven-widget posthaven-widget-site-control" data-url="https://posthaven.com/widget/site_render/control/798?widget_token=YpR6FRZNuNgERPX0u4A9rSQYoId4xen8fSShP5EttAg%3D"></div>
+<div id='container'>
+<header id='topbar'>
+<a href="https://posthaven.com/"><div class='posthaven-tab'></div>
+</a></header>
+<div id='flash'>
+</div>
+<header id='header'>
+<h1>
+<a href="http://blog.ycombinator.com">Y Combinator Posthaven
+</a></h1>
+<h2>
+
+</h2>
+
+<script src="http://blog.ycombinator.com/counter/homepage/count.js" type="text/javascript"></script>
+
+</header>
+<div id='main_container'>
+<div id='main'>
+<article class='post'>
+<header>
+<div class='post-title'>
+<h2>
+<a href="yc.a0.html">Shift Messenger (YC W15) Makes It Easy For Workers To Swap Hours</a>
+</h2>
+</div>
+</header>
+<div class='post-body' id='post_body_816534'>
+<p>        <div class="posthaven-gallery" id="posthaven_gallery[799917]">
+          <div class="posthaven-gallery-car">
+                    <p class="posthaven-file posthaven-file-image posthaven-file-state-processed">
+          <img class="posthaven-gallery-image" src="https://phaven-prod.s3.amazonaws.com/files/image_part/asset/1350469/IUv7uc_mwyXKqkpiLgXdk-dvqFE/medium_shiftmessenger.jpg" data-posthaven-state='processed'
+data-medium-src='https://phaven-prod.s3.amazonaws.com/files/image_part/asset/1350469/IUv7uc_mwyXKqkpiLgXdk-dvqFE/medium_shiftmessenger.jpg'
+data-medium-width='738'
+data-medium-height='385'
+data-large-src='https://phaven-prod.s3.amazonaws.com/files/image_part/asset/1350469/IUv7uc_mwyXKqkpiLgXdk-dvqFE/large_shiftmessenger.jpg'
+data-large-width='738'
+data-large-height='385'
+data-thumb-src='https://phaven-prod.s3.amazonaws.com/files/image_part/asset/1350469/IUv7uc_mwyXKqkpiLgXdk-dvqFE/thumb_shiftmessenger.jpg'
+data-thumb-width='200'
+data-thumb-height='200'
+data-xlarge-src='https://phaven-prod.s3.amazonaws.com/files/image_part/asset/1350469/IUv7uc_mwyXKqkpiLgXdk-dvqFE/xlarge_shiftmessenger.jpg'
+data-xlarge-width='738'
+data-xlarge-height='385'
+data-orig-src='https://phaven-prod.s3.amazonaws.com/files/image_part/asset/1350469/IUv7uc_mwyXKqkpiLgXdk-dvqFE/shiftmessenger.jpg'
+data-orig-width='738'
+data-orig-height='385'
+data-posthaven-id='1350469'/>
+        </p>
+
+          </div>
+          <div class="posthaven-gallery-cdr">
+            
+          </div>
+        </div>
+</p><blockquote>
+<p>"Anyone who has worked a retail job knows what a pain it is to take time off. You usually have to find someone to cover your shift and, unless you’ve managed to arrange your schedule in advance, that often entails panicked texts and phone calls to co-workers. A new startup called <a href="http://www.shiftmessenger.com/" target="_blank">Shift Messenger</a> wants to make the process less painful.</p>
+<p>Backed by Y Combinator, Shift Messenger was founded by Austin Vedder and Matt Tognetti. Former <a href="http://www.redbeacon.com/" target="_blank">Redbeacon</a> employees, the two got a look at the scheduling problems faced by retail workers after the home services marketplace was acquired by Home Depot."</p>
+</blockquote><p><a href="http://techcrunch.com/2015/02/27/shift-messenger/">Read the full story on TechCrunch</a></p>
+</div>
+
+<footer class='homepage-post-footer'>
+<div class='share'>
+<div class='share-item'>
+<div class="posthaven-widget posthaven-widget-post-upvote" data-url="https://posthaven.com/widget/post_render/upvote/816534?widget_token=smUudrm3_IjA_rJFg54vLO7qC0Q-6H0PFkgQZEuCs9E%3D"></div>
+</div>
+
+<div class='twitter share-item'>
+<a class='twitter-share-button share-item' data-text='Shift Messenger (YC W15) Makes It Easy For Workers To Swap Hours' data-url='http://blog.ycombinator.com/shift-messenger-yc-w15-makes-it-easy-for-workers-to-swap-hours' href='https://twitter.com/share'>
+Tweet
+</a>
+</div>
+
+<div class='facebook share-item'>
+<div class='fb-share-button' data-href='http://blog.ycombinator.com/shift-messenger-yc-w15-makes-it-easy-for-workers-to-swap-hours' data-layout='button_count'></div>
+</div>
+
+</div>
+
+<span class='display-date'>
+Posted
+<a href="http://blog.ycombinator.com/shift-messenger-yc-w15-makes-it-easy-for-workers-to-swap-hours">2 days ago</a>
+by
+<a href="/author/2030-y-combinator">Y Combinator</a>
+</span>
+</footer>
+</article>
+<article class='post'>
+<header>
+<div class='post-title'>
+<h2>
+<a href="yc.a1.html">YesGraph (YC W15) Raises A Million To Build A Better Referral System For Mobile Apps</a>
+</h2>
+</div>
+</header>
+<div class='post-body' id='post_body_816507'>
+<p>        <div class="posthaven-gallery" id="posthaven_gallery[799890]">
+          <div class="posthaven-gallery-car">
+                    <p class="posthaven-file posthaven-file-image posthaven-file-state-processed">
+          <img class="posthaven-gallery-image" src="https://phaven-prod.s3.amazonaws.com/files/image_part/asset/1350426/JjgrfQrzNYDGcxRoveHFXPwVcF0/medium_cockpit.png" data-posthaven-state='processed'
+data-medium-src='https://phaven-prod.s3.amazonaws.com/files/image_part/asset/1350426/JjgrfQrzNYDGcxRoveHFXPwVcF0/medium_cockpit.png'
+data-medium-width='601'
+data-medium-height='341'
+data-large-src='https://phaven-prod.s3.amazonaws.com/files/image_part/asset/1350426/JjgrfQrzNYDGcxRoveHFXPwVcF0/large_cockpit.png'
+data-large-width='601'
+data-large-height='341'
+data-thumb-src='https://phaven-prod.s3.amazonaws.com/files/image_part/asset/1350426/JjgrfQrzNYDGcxRoveHFXPwVcF0/thumb_cockpit.png'
+data-thumb-width='200'
+data-thumb-height='200'
+data-xlarge-src='https://phaven-prod.s3.amazonaws.com/files/image_part/asset/1350426/JjgrfQrzNYDGcxRoveHFXPwVcF0/xlarge_cockpit.png'
+data-xlarge-width='601'
+data-xlarge-height='341'
+data-orig-src='https://phaven-prod.s3.amazonaws.com/files/image_part/asset/1350426/JjgrfQrzNYDGcxRoveHFXPwVcF0/cockpit.png'
+data-orig-width='601'
+data-orig-height='341'
+data-posthaven-id='1350426'/>
+        </p>
+
+          </div>
+          <div class="posthaven-gallery-cdr">
+            
+          </div>
+        </div>
+</p><blockquote>
+<p>"When launching a new consumer application, especially those in the social space, many developers today rely on an invite mechanism that has the app’s initial user base reaching out and recommending the app to their friends. But today, these invite systems are often fairly basic – they connect to a phone’s address book and then force the user to sift through their hundreds of contacts for those they think would be interested in joining the new app, too.</p>
+<p>A Y Combinator-backed startup called <a href="https://www.yesgraph.com/" target="_blank">YesGraph</a> wants to make these invite and referral systems more intelligent, with a tool for developers that puts the best contacts – meaning those who are most likely to accept an invite – at the top of the list provided to users.</p>
+<p>The company has also now raised a $1 million seed round led by Bloomberg Beta to fund the service’s further development."</p>
+</blockquote><div><a href="http://techcrunch.com/2015/02/27/yc-backed-yesgraph-raises-a-million-to-build-a-better-referral-system-for-mobile-apps/">Read the full story on TechCrunch</a></div>
+</div>
+
+<footer class='homepage-post-footer'>
+<div class='share'>
+<div class='share-item'>
+<div class="posthaven-widget posthaven-widget-post-upvote" data-url="https://posthaven.com/widget/post_render/upvote/816507?widget_token=GNMfoTWJp_bgBnkUj2U5SUsu4bQbQHAlKKmEIqGrWus%3D"></div>
+</div>
+
+<div class='twitter share-item'>
+<a class='twitter-share-button share-item' data-text='YesGraph (YC W15) Raises A Million To Build A Better Referral System For Mobile Apps' data-url='http://blog.ycombinator.com/yesgraph-yc-w15-raises-a-million-to-build-a-better-referral-system-for-mobile-apps' href='https://twitter.com/share'>
+Tweet
+</a>
+</div>
+
+<div class='facebook share-item'>
+<div class='fb-share-button' data-href='http://blog.ycombinator.com/yesgraph-yc-w15-raises-a-million-to-build-a-better-referral-system-for-mobile-apps' data-layout='button_count'></div>
+</div>
+
+</div>
+
+<span class='display-date'>
+Posted
+<a href="http://blog.ycombinator.com/yesgraph-yc-w15-raises-a-million-to-build-a-better-referral-system-for-mobile-apps">2 days ago</a>
+by
+<a href="/author/2030-y-combinator">Y Combinator</a>
+</span>
+</footer>
+</article>
+<article class='post'>
+<header>
+<div class='post-title'>
+<h2>
+<a href="yc.a2.html">YC Digest - 2/20-2/26</a>
+</h2>
+</div>
+</header>
+<div class='post-body' id='post_body_816413'>
+<p><b><u>Top Stories from the YC World - 2/20/15-2/26/15<br></u></b><a href="http://blog.ycombinator.com/videos-from-female-founders-conference-2015-are-online">Videos from the Female Founders Conference are now online</a></p><div>
+<a href="http://ffc2015.startupnotes.org/">Startup Notes from the Female Founders Conference</a> by Greg Koberger</div><div><br></div><div>
+<a href="http://www.marketwatch.com/story/siriusxm-to-launch-startup-school-radio-with-y-combinator-partner-aaron-harris-2015-02-25">SiriusXM is launching "Startup School Radio" with YC's Aaron Harris</a><br>
+</div><div><br></div><div><a href="http://www.fastcompany.com/3042861/the-y-combinator-chronicles/the-secret-million-that-y-combinator-invests-in-all-its-startups">Transcriptic (YC W15) and the array of free services for new YC startups</a></div><div><br></div><div>
+<b><u>Launches</u></b>
+</div><div>YC W15: <a href="http://techcrunch.com/2015/02/26/yc-booktrope/" title="Link: http://techcrunch.com/2015/02/26/yc-booktrope/">Booktrope Rethinks Book Publishing</a><br>
+</div><div><br></div><div>YC W15: <a href="http://techcrunch.com/2015/02/26/openlistings/#cXlq2o:Sbm">Open Listings Enables Home Buyers To Purchase Houses Without Real Estate Agents</a><br>
+</div><div><br></div><div>YC W15: <a href="http://techcrunch.com/2015/02/26/20n/#cXlq2o:8Bs">20n, A YC Synthetic Biology Startup, Uses Software To Engineer Microbes For Chemical-Making</a><br>
+</div><div><br></div><div>
+<b><u></u></b>YC W15: <a href="http://www.greentechmedia.com/articles/read/Y-Combinators-First-Investment-in-Solar-is-a-PV-Finance-Platform-For-Emerg" title="Link: http://www.greentechmedia.com/articles/read/Y-Combinators-First-Investment-in-Solar-is-a-PV-Finance-Platform-For-Emerg">Y Combinator’s First Investment in Solar Is a PV Finance Platform for Emerging Economies</a> (Bright)<b><u><br></u></b>
+</div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div><br></div><div>YC W15: <a href="http://venturebeat.com/2015/02/25/for-y-combinator-funded-influencer-startup-themidgame-its-about-more-than-money/">For Y Combinator-funded influencer startup Themidgame, it’s about more than money</a>
+</div><div><br></div><div>YC W15: <a href="http://techcrunch.com/2015/02/25/yc-backed-answerbook-helps-retailers-automate-personalized-email-campaigns/#cXlq2o:Z3u">Answerbook Helps Retailers Automate Personalized Email Campaigns</a>
+</div><div><br></div><div>YC W15: <a href="http://techcrunch.com/2015/02/24/nextravel/?ncid=rss&amp;utm_source=feedburner&amp;utm_medium=feed&amp;utm_campaign=Feed%3A+Techcrunch+%28TechCrunch%29" title="Link: http://techcrunch.com/2015/02/24/nextravel/?ncid=rss&amp;utm_source=feedburner&amp;utm_medium=feed&amp;utm_campaign=Feed%3A+Techcrunch+%28TechCrunch%29">NexTravel Wants To Change The Way Corporate Travel Is Booked</a>
+</div><div><br></div><div>YC W15: <a href="http://techcrunch.com/2015/02/24/perceptiv-shift/#cXlq2o:hqd">Perceptiv’s SHIFT Turns Drones Into Smart Dollies For Filmmakers</a>
+</div><div></div><div></div><div></div><div></div><div><br></div><div>YC W15: <a href="http://techcrunch.com/2015/02/24/luka-the-app-that-replaces-your-foodie-friend-goes-live-in-sf/#cXlq2o:iNR" title="Link: http://techcrunch.com/2015/02/24/luka-the-app-that-replaces-your-foodie-friend-goes-live-in-sf/#cXlq2o:iNR">Luka, The App That Replaces Your Foodie Friend, Goes Live In SF</a>
+</div><div><br></div><div>YC W15: <a href="http://mashable.com/2015/02/23/magic/" title="Link: http://mashable.com/2015/02/23/magic/">We've just reached the logical extreme of the 'Uber for X' economy</a> (Magic)</div><div><br></div><div>YC W15: <a href="http://techcrunch.com/2015/02/20/software-eats-sex-trafficking-ycs-rescue-forensics-aids-law-enforcement-in-finding-victims/" title="Link: http://techcrunch.com/2015/02/20/software-eats-sex-trafficking-ycs-rescue-forensics-aids-law-enforcement-in-finding-victims/">Rescue Forensics (YC W15) Aids Law Enforcement In Finding Victims</a>
+</div><div><br></div><div><b><u>Essays</u></b></div><div>
+<a href="http://blog.samaltman.com/startup-advice-briefly" title="Link: http://blog.samaltman.com/startup-advice-briefly">Startup advice, briefly</a> by Sam Altman</div><div><br></div><div>
+<a href="https://www.aerofs.com/blog/where-to-start-a-startup/" title="Link: https://www.aerofs.com/blog/where-to-start-a-startup/">Where to start a startup</a> by Yuri Sagalov</div>
+</div>
+
+<footer class='homepage-post-footer'>
+<div class='share'>
+<div class='share-item'>
+<div class="posthaven-widget posthaven-widget-post-upvote" data-url="https://posthaven.com/widget/post_render/upvote/816413?widget_token=r27gbVQZ-SscBH5tSpJ2NvtCcULRWIqqKaKnOhXu78s%3D"></div>
+</div>
+
+<div class='twitter share-item'>
+<a class='twitter-share-button share-item' data-text='YC Digest - 2/20-2/26' data-url='http://blog.ycombinator.com/yc-digest-2-slash-20-2-slash-26' href='https://twitter.com/share'>
+Tweet
+</a>
+</div>
+
+<div class='facebook share-item'>
+<div class='fb-share-button' data-href='http://blog.ycombinator.com/yc-digest-2-slash-20-2-slash-26' data-layout='button_count'></div>
+</div>
+
+</div>
+
+<span class='display-date'>
+Posted
+<a href="http://blog.ycombinator.com/yc-digest-2-slash-20-2-slash-26">2 days ago</a>
+by
+<a href="/author/2030-y-combinator">Y Combinator</a>
+</span>
+</footer>
+</article>
+
+<div class='pagination'>
+<ul class='clearfix'>
+
+
+<li class='active'>
+<a href="#">1</a>
+</li>
+
+<li class=''>
+<a href="yc.1.html" rel="next">2</a>
+</li>
+
+<li class=''>
+<a href="yc.2.html">3</a>
+</li>
+
+<li class=''>
+<a href="yc.3.html">4</a>
+</li>
+
+<li class=''>
+<a href="yc.4.html">5</a>
+</li>
+
+<li class='disabled gap'>
+<a href="#">&hellip;</a>
+</li>
+
+<li>
+<a href="yc.1.html" rel="next">Next &rsaquo;</a>
+</li>
+
+<li>
+<a href="/?page=132">Last &raquo;</a>
+</li>
+
+</ul>
+</div>
+
+
+</div>
+<aside id='sidebar'>
+
+<section id='bio'>
+<h3>
+<a href="/author/2030-y-combinator">Y Combinator</a>
+</h3>
+<p>Not your average fixed point combinator.</p><p><a href="http://ycombinator.com">ycombinator.com</a></p>
+<div class='profile-pic'>
+<img height='72' src='https://phaven-prod.s3.amazonaws.com/files/profile_pic/asset/1095067/z1Mvfb6GiEa405SoRjHKSEd4hFw/medium_logo2000.png' width='72'>
+</div>
+
+</section>
+
+<section class='search-archive'>
+<form action='/archive' method='GET'>
+<input class='archive-search small' name='query' type='text'>
+</form>
+<div class='archive-link'>
+<a href="/archive">Browse the Archive&nbsp;&raquo;
+</a></div>
+</section>
+<section id='contributors'>
+<h3>Contributors</h3>
+<ul>
+<li>
+<a href="/author/11241-alexis-ohanian">Alexis Ohanian</a>
+</li>
+<li>
+<a href="/author/11075-daniel-gackle">Daniel Gackle</a>
+</li>
+<li>
+<a href="/author/1-garry-tan">Garry Tan</a>
+</li>
+<li>
+<a href="/author/3341-jessica-livingston">Jessica Livingston</a>
+</li>
+<li>
+<a href="/author/8324-kat-manalac">Kat Manalac</a>
+</li>
+<li>
+<a href="/author/9838-kevin-hale">Kevin Hale</a>
+</li>
+<li>
+<a href="/author/13512-michael-seibel">Michael Seibel</a>
+</li>
+<li>
+<a href="/author/2608-nick-sivo">Nick Sivo</a>
+</li>
+<li>
+<a href="/author/344-paul-graham">Paul Graham</a>
+</li>
+<li>
+<a href="/author/13017-qasar-younis">Qasar Younis</a>
+</li>
+<li>
+<a href="/author/1989-sam-altman">Sam Altman</a>
+</li>
+</ul>
+</section>
+
+<section class='subscribe'>
+<div class="posthaven-widget posthaven-widget-site-subscribe" data-url="https://posthaven.com/widget/site_render/subscribe/798?widget_token=YpR6FRZNuNgERPX0u4A9rSQYoId4xen8fSShP5EttAg%3D"></div>
+</section>
+<section id='tag_list_menu'>
+<h3>Tags</h3>
+<ul>
+<li class=''>
+<a href="/tag/Startup%20School%202013">Startup School 2013
+</a><span class='measure tag-count'>2</span>
+</li>
+<li class=''>
+<a href="/tag/safe">safe
+</a><span class='measure tag-count'>1</span>
+</li>
+<li class=''>
+<a href="/tag/w14">w14
+</a><span class='measure tag-count'>1</span>
+</li>
+<li class=''>
+<a href="/tag/Watsi">Watsi
+</a><span class='measure tag-count'>1</span>
+</li>
+<li class=''>
+<a href="/tag/Partners">Partners
+</a><span class='measure tag-count'>1</span>
+</li>
+<li class=''>
+<a href="/tag/Panorama">Panorama
+</a><span class='measure tag-count'>1</span>
+</li>
+<li class=''>
+<a href="/tag/videos">videos
+</a><span class='measure tag-count'>1</span>
+</li>
+<li class=''>
+<a href="/tag/B2B">B2B
+</a><span class='measure tag-count'>1</span>
+</li>
+<li class=''>
+<a href="/tag/Founder%20Stories">Founder Stories
+</a><span class='measure tag-count'>1</span>
+</li>
+<li class=''>
+<a href="/tag/App.net">App.net
+</a><span class='measure tag-count'>1</span>
+</li>
+<li class='hidden-tag'>
+<a href="/tag/Applebee&#x27;s">Applebee's
+</a><span class='measure tag-count'>1</span>
+</li>
+<li class='hidden-tag'>
+<a href="/tag/Startup%20Notes">Startup Notes
+</a><span class='measure tag-count'>1</span>
+</li>
+<li class='hidden-tag'>
+<a href="/tag/Cambly">Cambly
+</a><span class='measure tag-count'>1</span>
+</li>
+<li class='hidden-tag'>
+<a href="/tag/S13">S13
+</a><span class='measure tag-count'>1</span>
+</li>
+<li class='hidden-tag'>
+<a href="/tag/tablets">tablets
+</a><span class='measure tag-count'>1</span>
+</li>
+<li class='hidden-tag'>
+<a href="/tag/mobile%20advertising">mobile advertising
+</a><span class='measure tag-count'>1</span>
+</li>
+<li class='hidden-tag'>
+<a href="/tag/Broadcasts">Broadcasts
+</a><span class='measure tag-count'>1</span>
+</li>
+<li class='hidden-tag'>
+<a href="/tag/URX">URX
+</a><span class='measure tag-count'>1</span>
+</li>
+<li class='hidden-tag'>
+<a href="/tag/E%20la%20Carte">E la Carte
+</a><span class='measure tag-count'>1</span>
+</li>
+<li class='hidden-tag'>
+<a href="/tag/advice">advice
+</a><span class='measure tag-count'>1</span>
+</li>
+<li class='hidden-tag'>
+<a href="/tag/ZenPayroll">ZenPayroll
+</a><span class='measure tag-count'>1</span>
+</li>
+<li class='show-tags'>
+<a href="/tags/all">See all 21 tags&nbsp;&raquo;
+</a></li>
+</ul>
+</section>
+
+<section id='feed_link'>
+<a href="/posts.atom"><span class='feed-icon'></span>
+</a></section>
+
+
+</aside>
+</div>
+</div>
+<script>
+  var POSTHAVEN_SCRIBD_PUB_ID = 'pub-93932668657726994124';
+</script>
+<script src="//www.scribd.com/javascripts/scribd_api.js" type="text/javascript"></script>
+<script src="//ajax.googleapis.com/ajax/libs/swfobject/2.2/swfobject.js" type="text/javascript"></script>
+<script async="async" src="//platform.twitter.com/widgets.js" type="text/javascript"></script>
+<script src="//posthaven-assets.s3.amazonaws.com/assets/blog-c65809e16c8189433fa9f4d3d2854213.js" type="text/javascript"></script>
+<script>
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-38525690-2']);
+  _gaq.push(['_setAllowLinker', true]);
+  _gaq.push(['_trackPageview']);
+</script>
+<script>
+  var _gaq = _gaq || [];
+  _gaq.push(['b._setAccount', 'UA-44894215-1']);
+  _gaq.push(['b._trackPageview']);
+</script>
+<script>
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') +
+             '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+</script>
+
+
+</body>
+</html>
