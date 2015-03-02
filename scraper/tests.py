@@ -1,4 +1,5 @@
 from django.test import TestCase
+from shutil import rmtree
 
 import os
 
@@ -47,12 +48,20 @@ class ProxyServerTests(TestCase):
 
 class ExtractorTests(TestCase):
 
-    def setUp(self):
+    @classmethod
+    def setUpClass(self):
         target_file = get_path('yc.0.html')
         self.extractor = utils.Extractor(target_file)
 
+    @classmethod
+    def tearDownClass(self):
+        rmtree(self.extractor.get_location())
+
     def tearDown(self):
-        pass
+        self.extractor.set_location(self.current_location)
+
+    def setUp(self):
+        self.current_location = self.extractor.get_location()
 
     def test_parse_content(self):
         self.assertNotEqual(self.extractor.hash_value, '')
@@ -60,7 +69,7 @@ class ExtractorTests(TestCase):
 
     def test_set_location(self):
         self.extractor.set_location('/new/location')
-        self.assertEquals(self.extractor.download_to, '/new/location')
+        self.assertEquals(self.extractor.get_location(), '/new/location')
 
     def test_complete_url_no_http(self):
         tmp = self.extractor._url
@@ -93,20 +102,20 @@ class ExtractorTests(TestCase):
 
     def test_prepare_directory(self):
         self.extractor.prepare_directory()
-        self.assertEqual(os.path.exists(self.extractor.download_to), True)
+        self.assertEqual(os.path.exists(self.extractor.get_location()), True)
 
     def test_prepare_directory_existing(self):
-        path = self.extractor.download_to
-        test_file = os.path.join(path, 'new_file')
+        test_file = os.path.join(self.current_location, 'new_file')
         self.extractor.prepare_directory()
         f0 = open(test_file, 'w')
         f0.close()
         # recall the prepare directory
         self.extractor.prepare_directory()
-        self.assertEqual(os.path.exists(path), True)
+        self.assertEqual(os.path.exists(self.current_location), True)
         self.assertEqual(os.path.exists(test_file), False)
 
     def test_download_file(self):
+        self.extractor.prepare_directory()
         FILE_URL = 'https://raw.githubusercontent.com/zniper/django-scraper/master/scraper/test_data/simple_page.txt'
         file_name = self.extractor.download_file(FILE_URL)
         self.assertEqual(file_name, 'simple_page.txt')

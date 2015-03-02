@@ -29,6 +29,7 @@ refine_rules = [
 class Extractor(object):
     _url = ''
     _hash_value = ''
+    _download_to = ''
     headers = {}
 
     def __init__(self, url, base_dir='', proxies=None, user_agent=None):
@@ -56,7 +57,10 @@ class Extractor(object):
         return hash_value, etree.HTML(content)
 
     def set_location(self, location=''):
-        self.download_to = os.path.join(self.base_dir, location)
+        self._download_to = os.path.join(self.base_dir, location)
+
+    def get_location(self):
+        return self._download_to
 
     def extract_links(self, xpath='//a', expand_rules=None, depth=1,
                       make_root=False):
@@ -154,21 +158,21 @@ class Extractor(object):
         with open(self.get_path(INDEX_JSON+postfix), 'wb') as mfile:
             mfile.write(json.dumps(metadata))
 
-        return self.download_to
+        return self._download_to
 
     def get_path(self, file_name):
         """ Return full path of file (include containing directory) """
-        return os.path.join(self.download_to,
+        return os.path.join(self._download_to,
                             os.path.basename(file_name))
 
     def prepare_directory(self):
         """ Create local directories if not existing """
         try:
-            rmtree(self.download_to)
+            rmtree(self._download_to)
         except OSError:
             pass
         finally:
-            os.makedirs(self.download_to)
+            os.makedirs(self._download_to)
 
     def download_file(self, url):
         """ Download file from given url and save to common location """
