@@ -30,6 +30,7 @@ class Extractor(object):
     _url = ''
     _hash_value = ''
     _download_to = ''
+    _html = ''
     headers = {}
 
     def __init__(self, url, base_dir='', proxies=None, user_agent=None):
@@ -53,6 +54,7 @@ class Extractor(object):
             with open(self._url, 'r') as target:
                 content = target.read()
         hash_value = sha1(self._url).hexdigest()
+        self._html = content
 
         return hash_value, etree.HTML(content)
 
@@ -109,24 +111,28 @@ class Extractor(object):
         metadata = metadata or {}
         metadata.update(base_meta)
 
-        for key in metapath:
-            metadata[key] = self.root.xpath(metapath[key]) or ''
+        if metapath:
+            for key in metapath:
+                metadata[key] = self.root.xpath(metapath[key]) or ''
 
         # Create dir and download HTML content
         self.prepare_directory()
 
         content = etree.tostring(self.root.xpath(xpath)[0], pretty_print=True)
-        content = self.refine_content(content, custom_rules=custom_rules)
+        if custom_rules:
+            content = self.refine_content(content, custom_rules=custom_rules)
         node = etree.HTML(content)
 
         # Check if this content will be fully downloaded or not
         stop_flag = False
         norm_content = content.lower()
-        for word in blacklist:
-            if norm_content.find(word) != -1:
-                logger.info('Bad word found (%s). Downloading stopped.' % word)
-                stop_flag = True
-                break
+
+        if blacklist:
+            for word in blacklist:
+                if norm_content.find(word) != -1:
+                    logger.info('Bad word found (%s). Downloading stopped.' % word)
+                    stop_flag = True
+                    break
 
         # Download images if required
         images_meta = []
@@ -143,11 +149,12 @@ class Extractor(object):
         metadata['images'] = images_meta
 
         # Download extra content
-        extra_files = []
-        for single_path in extrapath:
-            for url in self.root.xpath(single_path):
-                extra_files.append(self.download_file(url))
-        metadata['extras'] = extra_files
+        if extrapath:
+            extra_files = []
+            for single_path in extrapath:
+                for url in self.root.xpath(single_path):
+                    extra_files.append(self.download_file(url))
+            metadata['extras'] = extra_files
 
         # Write to HTML file
         postfix = '.denied' if stop_flag else ''
@@ -204,6 +211,9 @@ class Extractor(object):
             actions:
                 'replace'
         """
+        if not custom_rules:
+            return content
+
         content = content.replace('\n', '').strip()
 
         # Run custom rules first

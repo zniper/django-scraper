@@ -7,7 +7,7 @@ from scraper import utils, models
 
 
 LOCAL_HOST = 'http://127.0.0.1:8000/'
-GITHUB_URL = 'https://raw.githubusercontent.com/zniper/django-scraper/master/scraper/test_data/'
+DATA_URL = """https://raw.githubusercontent.com/zniper/django-scraper/master/scraper/test_data/"""
 DATA_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                         'test_data')
 
@@ -46,7 +46,7 @@ class ProxyServerTests(TestCase):
         self.assertNotEqual(proxy.pk, None)
 
 
-class ExtractorTests(TestCase):
+class ExtractorLocalTests(TestCase):
 
     @classmethod
     def setUpClass(self):
@@ -55,7 +55,9 @@ class ExtractorTests(TestCase):
 
     @classmethod
     def tearDownClass(self):
-        rmtree(self.extractor.get_location())
+        location = self.extractor.get_location()
+        if os.path.exists(location):
+            rmtree(location)
 
     def tearDown(self):
         self.extractor.set_location(self.current_location)
@@ -114,8 +116,51 @@ class ExtractorTests(TestCase):
         self.assertEqual(os.path.exists(self.current_location), True)
         self.assertEqual(os.path.exists(test_file), False)
 
+    def test_refine_content(self):
+        with open(get_path('yc.0.html'), 'r') as index:
+            content = index.read()
+            self.assertNotEqual(content.find("<section id='bio'>"), -1)
+            self.assertNotEqual(content.find("<section id='contributors'>"),
+                                -1)
+            self.assertNotEqual(content.find("<div class='archive-link'>"), -1)
+            rules = ['<section .*?>', "<div class='archive-link'>"]
+            refined = self.extractor.refine_content(content, rules)
+        self.assertEqual(refined.find("<section id='bio'>"), -1)
+        self.assertEqual(refined.find("<section id='contributors'>"), -1)
+        self.assertEqual(refined.find("<div class='archive-link'>"), -1)
+
     def test_download_file(self):
         self.extractor.prepare_directory()
-        FILE_URL = 'https://raw.githubusercontent.com/zniper/django-scraper/master/scraper/test_data/simple_page.txt'
+        FILE_URL = DATA_URL + 'simple_page.txt'
         file_name = self.extractor.download_file(FILE_URL)
         self.assertEqual(file_name, 'simple_page.txt')
+
+    def test_download_file_failed(self):
+        self.extractor.prepare_directory()
+        FILE_URL = DATA_URL + 'not_exist.txt'
+        file_name = self.extractor.download_file(FILE_URL)
+        self.assertEqual(file_name, None)
+
+
+class ExtractorOnlineTests(TestCase):
+
+    @classmethod
+    def setUpClass(self):
+        self.extractor = utils.Extractor(DATA_URL+'yc.0.html')
+
+    @classmethod
+    def tearDownClass(self):
+        location = self.extractor.get_location()
+        if os.path.exists(location):
+            rmtree(location)
+
+    def tearDown(self):
+        self.extractor.set_location(self.current_location)
+
+    def setUp(self):
+        self.current_location = self.extractor.get_location()
+
+    def test_extract_content(self):
+        xpath = "//div[@class='post-title']/h2/a"
+        path = self.extractor.extract_content(xpath)
+        print path
