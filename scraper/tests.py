@@ -2,6 +2,7 @@ from django.test import TestCase
 from shutil import rmtree
 
 import os
+import json
 
 from scraper import utils, models
 
@@ -160,7 +161,44 @@ class ExtractorOnlineTests(TestCase):
     def setUp(self):
         self.current_location = self.extractor.get_location()
 
-    def test_extract_content(self):
-        xpath = "//div[@class='post-title']/h2/a"
-        path = self.extractor.extract_content(xpath)
-        print path
+    def test_extract_content_basic(self):
+        content_xpath = "//div[@id='main']/article[@class='post']"
+        path = self.extractor.extract_content(content_xpath)
+        self.assertEqual(path, self.current_location)
+        self.assertEqual(len(os.listdir(self.current_location)), 3)
+
+    def test_extract_content_blackword(self):
+        content_xpath = "//div[@id='main']/article[@class='post']"
+        bw = ['panicked', 'phone']
+        path = self.extractor.extract_content(content_xpath, blacklist=bw)
+        self.assertEqual(path, None)
+
+    def test_extract_content_no_image(self):
+        content_xpath = "//div[@id='main']/article[@class='post']"
+        path = self.extractor.extract_content(content_xpath, with_image=False)
+        self.assertEqual(path, self.current_location)
+        self.assertEqual(len(os.listdir(self.current_location)), 2)
+
+    def test_extract_content_meta(self):
+        content_xpath = "//div[@id='main']/article[@class='post']"
+        metas = {
+            'title': "(//h2/a)[1]/text()",
+        }
+        path = self.extractor.extract_content(
+            content_xpath, metapath=metas, with_image=False)
+        self.assertEqual(path, self.current_location)
+        # Verify the meta file
+        with open(os.path.join(path, 'index.json'), 'r') as vfile:
+            values = json.load(vfile)
+            self.assertEquals(
+                values['title'],
+                ["Shift Messenger (YC W15) Makes It Easy For Workers To Swap Hours"]
+            )
+
+    def test_extract_content_extra(self):
+        content_xpath = "//div[@id='main']/article[@class='post']"
+        extra = ['(//img)[1]/@src']
+        path = self.extractor.extract_content(
+            content_xpath, extrapath=extra, with_image=False)
+        self.assertEqual(path, self.current_location)
+        self.assertEqual(len(os.listdir(self.current_location)), 3)

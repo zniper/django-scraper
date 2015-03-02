@@ -94,7 +94,7 @@ class Extractor(object):
             path = urljoin(self._url, path)
         return path
 
-    def extract_content(self, xpath, with_image=True, metapath=None,
+    def extract_content(self, content_xpath, with_image=True, metapath=None,
                         extrapath=None, custom_rules=None, blacklist=None,
                         metadata=None):
         """ Download the whole content and images and save to local
@@ -118,7 +118,8 @@ class Extractor(object):
         # Create dir and download HTML content
         self.prepare_directory()
 
-        content = etree.tostring(self.root.xpath(xpath)[0], pretty_print=True)
+        content = etree.tostring(self.root.xpath(content_xpath)[0],
+                                 pretty_print=True)
         if custom_rules:
             content = self.refine_content(content, custom_rules=custom_rules)
         node = etree.HTML(content)
@@ -135,6 +136,10 @@ class Extractor(object):
                     stop_flag = True
                     break
 
+        # Dealing with stopping at the middle
+        if stop_flag:
+            return None
+
         # Download images if required
         images_meta = []
         if with_image and not stop_flag:
@@ -146,7 +151,7 @@ class Extractor(object):
                 content = content.replace(ipath, file_name)
                 meta = {'caption': ''.join(el.xpath('@alt'))}
                 images_meta.append((file_name, meta))
-                print '  ' + os.path.basename(file_name)
+                #print '  ' + os.path.basename(file_name)
         metadata['images'] = images_meta
 
         # Download extra content
