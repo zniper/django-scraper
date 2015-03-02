@@ -130,7 +130,8 @@ class Extractor(object):
         if blacklist:
             for word in blacklist:
                 if norm_content.find(word) != -1:
-                    logger.info('Bad word found (%s). Downloading stopped.' % word)
+                    logger.info('Bad word found (%s). Downloading stopped.'
+                                % word)
                     stop_flag = True
                     break
 
