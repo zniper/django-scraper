@@ -45,37 +45,39 @@ class Source(models.Model):
         logger.info('Start crawling %s (%s)' % (self.name, self.url))
 
         # Custom definitions
-        metapath = eval(self.meta_xpath)
-        rules = [item.strip() for item in self.refine_rules.split('\n')
-                 if item.strip()]
+        metapath = eval(self.meta_xpath) if self.meta_xpath else None
+        expand_rules = self.expand_rules.split('\n') \
+            if self.expand_rules else None
+        refine_rules = [item.strip() for item in self.refine_rules.split('\n')
+                        if item.strip()]
         extrapath = [item.strip() for item in self.extra_xpath.split('\n')
                      if item.strip()]
-        proxy = {}
-        if self.proxy:
-            logger.info('Use proxy server: %s' % self.proxy.address)
-            proxy = self.proxy.get_dict()
-        else:
-            proxy = None
-        if self.user_agent:
-            logger.info('Use user agent: %s' % self.user_agent.name)
-            ua = self.user_agent.value
-        else:
-            ua = None
+
+        proxy = self.proxy.get_dict() if self.proxy else None
+        logger.info('Use proxy server: %s' % self.proxy)
+
+        ua = self.user_agent.value if self.user_agent else None
+        logger.info('Use user agent: %s' % self.user_agent)
+
+        # Initialize extractor
         extractor = Extractor(self.url, settings.CRAWL_ROOT,
                               proxies=proxy, user_agent=ua)
         make_root = False
         if self.link_xpath.startswith('/+'):
             make_root = True
             self.link_xpath = self.link_xpath[2:]
+
         all_links = extractor.extract_links(
             xpath=self.link_xpath,
-            expand_rules=self.expand_rules.split('\n'),
+            expand_rules=expand_rules,
             depth=self.crawl_depth,
             make_root=make_root)
         logger.info('%d link(s) found' % len(all_links))
 
+        # Just dry running or real download
         if download:
             blacklist = []
+            local_content = []
             if self.black_words:
                 blacklist = self.black_words.words.split('\n')
             for link in all_links:
@@ -97,14 +99,17 @@ class Source(models.Model):
                         with_image=self.download_image,
                         metapath=metapath,
                         extrapath=extrapath,
-                        custom_rules=rules,
+                        custom_rules=refine_rules,
                         blacklist=blacklist,
                         metadata=base_meta)
                     content = LocalContent(url=link_url, source=self,
                                            local_path=local_path)
                     content.save()
+                    local_content.append(content)
                 except:
                     logger.exception('Error when extracting %s' % link['url'])
+            paths = [lc.local_path for lc in local_content]
+            return paths
         else:
             return all_links
 

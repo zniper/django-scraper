@@ -1,4 +1,6 @@
 from django.test import TestCase
+from django.conf import settings
+
 from shutil import rmtree
 
 import os
@@ -130,6 +132,13 @@ class ExtractorLocalTests(TestCase):
         self.assertEqual(refined.find("<section id='contributors'>"), -1)
         self.assertEqual(refined.find("<div class='archive-link'>"), -1)
 
+    def test_refine_content_no_rule(self):
+        with open(get_path('yc.0.html'), 'r') as index:
+            content = index.read()
+            rules = []
+            refined = self.extractor.refine_content(content, rules)
+        self.assertEqual(content, refined)
+
     def test_download_file(self):
         self.extractor.prepare_directory()
         FILE_URL = DATA_URL + 'simple_page.txt'
@@ -167,6 +176,14 @@ class ExtractorOnlineTests(TestCase):
         self.assertEqual(path, self.current_location)
         self.assertEqual(len(os.listdir(self.current_location)), 3)
 
+    def test_extract_content_with_ua(self):
+        UA = 'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2228.0 Safari/537.36' 
+        self.extractor = utils.Extractor(DATA_URL+'yc.0.html', user_agent=UA)
+        content_xpath = "//div[@id='main']/article[@class='post']"
+        path = self.extractor.extract_content(content_xpath, with_image=False)
+        self.assertEqual(path, self.current_location)
+        self.assertEqual(len(os.listdir(self.current_location)), 2)
+
     def test_extract_content_blackword(self):
         content_xpath = "//div[@id='main']/article[@class='post']"
         bw = ['panicked', 'phone']
@@ -202,3 +219,48 @@ class ExtractorOnlineTests(TestCase):
             content_xpath, extrapath=extra, with_image=False)
         self.assertEqual(path, self.current_location)
         self.assertEqual(len(os.listdir(self.current_location)), 3)
+
+    def test_extract_links_expand(self):
+        links = self.extractor.extract_links(
+            "//h2/a",
+            expand_rules=["//a[@rel='next']/@href"],
+            depth=2
+        )
+        self.assertEqual(len(links), 23)
+        self.assertEqual(links[0]['url'],
+                         'https://raw.githubusercontent.com/zniper/django-scraper/master/scraper/test_data/yc.a0.html')
+        self.assertEqual(links[0]['text'],
+                         'Shift Messenger (YC W15) Makes It Easy For Workers To Swap Hours')
+        self.assertEqual(links[22]['url'],
+                         'http://blog.ycombinator.com/cloudmedx-yc-w15-helps-doctors-spot-patients-who-will-need-expensive-treatment')
+        self.assertEqual(links[22]['text'],
+                         'CloudMedx (YC W15) Helps Doctors Spot Patients Who Will Need Expensive Treatment')
+
+
+class ModelSourceTests(TestCase):
+
+    def setUp(self):
+        self.args = {
+            'url': DATA_URL+'yc.0.html',
+            'name': 'Test Source',
+            'link_xpath': "//div[@class='post-title']/h2/a",
+            'content_xpath': "//div[@class='post-body']",
+        }
+
+    @classmethod
+    def tearDown(self):
+        if os.path.exists(settings.CRAWL_ROOT):
+            rmtree(settings.CRAWL_ROOT)
+
+    def test_crawl_basic(self):
+        source = models.Source(**self.args)
+        source.save()
+        self.assertGreater(source.pk, 0)
+        paths = source.crawl()
+        self.assertEqual(len(paths), 3)
+
+        # Test remove the local content
+        content = source.content.all()[1]
+        self.assertEqual(os.path.exists(content.local_path), True)
+        content.remove_files()
+        self.assertEqual(os.path.exists(content.local_path), False)
