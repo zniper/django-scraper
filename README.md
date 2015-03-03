@@ -3,6 +3,7 @@ django-scraper
 
 [![Build Status](https://travis-ci.org/zniper/django-scraper.svg)](https://travis-ci.org/zniper/django-scraper)
 [![Coverage Status](https://coveralls.io/repos/zniper/django-scraper/badge.svg?branch=master)](https://coveralls.io/r/zniper/django-scraper?branch=master)
+[![Downloads](https://pypip.in/download/django-scraper/badge.svg)](https://pypi.python.org/pypi/django-scraper/)
 [![Latest Version](https://pypip.in/version/django-scraper/badge.svg)](https://pypi.python.org/pypi/django-scraper/)
 
 **django-scraper** is a Django application which crawls and downloads online content following configurable instructions.
