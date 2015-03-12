@@ -1,3 +1,9 @@
+.. image:: https://travis-ci.org/zniper/django-scraper.svg?branch=master
+       :target: https://travis-ci.org/zniper/django-scraper
+
+.. image:: https://coveralls.io/repos/zniper/django-scraper/badge.svg?branch=master 
+       :target: https://coveralls.io/r/zniper/django-scraper?branch=master
+
 Features
 ========
 

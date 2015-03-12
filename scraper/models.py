@@ -25,7 +25,7 @@ class Source(models.Model):
     expand_rules = models.TextField(blank=True, null=True)
     crawl_depth = models.PositiveIntegerField(default=1)
     # Content section
-    content_xpath = models.CharField(max_length=255)
+    content_xpath = models.CharField(max_length=255, blank=True, null=True)
     content_type = models.ForeignKey('ContentType', blank=True, null=True)
     meta_xpath = models.TextField(default='', blank=True)
     extra_xpath = models.TextField(default='', blank=True)
@@ -38,7 +38,10 @@ class Source(models.Model):
     user_agent = models.ForeignKey('UserAgent', blank=True, null=True)
 
     def __unicode__(self):
-        return 'Source: %s' % self.name
+        return '%s' % (self.name or self.url)
+
+    def get_extractor(self):
+        return self._extractor
 
     def crawl(self, download=True):
         logger.info('')
@@ -60,14 +63,14 @@ class Source(models.Model):
         logger.info('Use user agent: %s' % self.user_agent)
 
         # Initialize extractor
-        extractor = Extractor(self.url, settings.CRAWL_ROOT,
-                              proxies=proxy, user_agent=ua)
+        self._extractor = Extractor(self.url, settings.CRAWL_ROOT,
+                                    proxies=proxy, user_agent=ua)
         make_root = False
         if self.link_xpath.startswith('/+'):
             make_root = True
             self.link_xpath = self.link_xpath[2:]
 
-        all_links = extractor.extract_links(
+        all_links = self._extractor.extract_links(
             xpath=self.link_xpath,
             expand_rules=expand_rules,
             depth=self.crawl_depth,

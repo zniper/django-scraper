@@ -54,13 +54,13 @@ Usage
 To start using the application, you should create new `Source` object via admin interface. There, please enter following information:
     
 * `url` - URL to the start page of `source` (website, entry list,...)
-* `name` - Name of the source
-* `link xpath` - XPATH to links of main content page (entries, articles,...)
-* `expand rules` - XPATH to url values of next scraping session ~ higher depth
-* `crawl depth` - Max depth of scraping session. This relates to expand rules
-* `content xpath` - XPATH to the target value of content page (article body,...)
-* `content type` - Type of the current `source`
-* `meta xpath` - Python dictionary of meta-data information will extracted along the main content
+* `name` - Name of the source to be crawled
+* `link_xpath` - XPath links of main content page (entries, articles,...)
+* `expand rules` - XPath to url values of next scraping session(s) ~ higher depth
+* `crawl_depth` - Max depth of scraping session. This relates to expand rules
+* `content_xpath` - XPath to the target value of content page (article body,...)
+* `content_type` - Type of the current `source`
+* `meta_xpath` - XPath dictionary of meta-data information will extracted along the main content
 
     *Example:*
         
@@ -68,8 +68,8 @@ To start using the application, you should create new `Source` object via admin 
             'title': '//h1[@class="title"]/text()',
             'keywords': 'keywords': '//meta[@name="keywords"]/@content',
         }
-* `extra xpath` - XPATH to additional content that will be downloaded (PDF files, video clips,...)
-* `refine rules` - List of regular expressions will be applied to content to remove redundant data. Each regex stays in one different line.
+* `extra_xpath` - XPath to additional content that will be downloaded (PDF files, video clips,...)
+* `refine_rules` - RegEx List of regular expressions will be applied to content to remove redundant data. Each regex stays in one different line.
 
     *Example:*
         
@@ -77,10 +77,10 @@ To start using the application, you should create new `Source` object via admin 
         <br/?>
 
 * `active` - Determine if this `source` will run or not
-* `download image` - Check this to download all images present inside the specified content
-* `black words` - Select set of words, a content will not be downloaded if containing one of those words
+* `download_image` - Check this to download all images present inside the specified content
+* `black_words` - Select set of words, a content will not be downloaded if containing one of those words
 * `proxy` - Proxy server will be used when crawling current source
-* `user agent` - User Agent value set in the header of every requests
+* `user_agent` - User Agent value set in the header of every requests
 
 After being saved, the `source` object will run a scraping session by calling crawl() method:
 

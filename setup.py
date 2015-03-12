@@ -19,7 +19,7 @@ setup(
     author='Ha Pham',
     author_email='me@zniper.net',
     packages=['scraper', 'scraper.management.commands', 'scraper.migrations'],
-    keywords='crawl scraper spider',
+    keywords='crawl scraper spider web pages data extract collect',
     install_requires=[
         'requests',
         'lxml',
