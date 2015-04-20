@@ -4,6 +4,8 @@ import re
 import json
 import logging
 
+from django.core.files.storage import default_storage as storage
+
 from requests.exceptions import InvalidSchema, MissingSchema
 from lxml import etree
 from urlparse import urljoin
@@ -90,8 +92,11 @@ class Extractor(object):
         return all_links
 
     def complete_url(self, path):
-        if path.strip().lower()[:7] != 'http://':
-            path = urljoin(self._url, path)
+        try:
+            if path.strip().lower()[:7] != 'http://':
+                path = urljoin(self._url, path)
+        except:
+            logger.error('Error when completing URL of: ', path)
         return path
 
     def extract_content(self, content_xpath, with_image=True, metapath=None,
@@ -163,11 +168,11 @@ class Extractor(object):
 
         # Write to HTML file
         postfix = '.denied' if stop_flag else ''
-        with open(self.get_path(INDEX_HTML+postfix), 'wb') as hfile:
+        with storage.open(self.get_path(INDEX_HTML+postfix), 'wb') as hfile:
             hfile.write(content)
 
         # Write manifest
-        with open(self.get_path(INDEX_JSON+postfix), 'wb') as mfile:
+        with storage.open(self.get_path(INDEX_JSON+postfix), 'wb') as mfile:
             mfile.write(json.dumps(metadata))
 
         return self._download_to
@@ -200,7 +205,7 @@ class Extractor(object):
                                         proxies=self.proxies)
                 if response.status_code == 200:
                     file_path = self.get_path(file_name)
-                    with open(file_path, 'wb') as bfile:
+                    with storage.open(file_path, 'wb') as bfile:
                         bfile.write(response.content)
                     return file_name
                 else:
