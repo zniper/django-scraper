@@ -3,6 +3,7 @@ import logging
 
 from datetime import datetime
 from shutil import rmtree
+from jsonfield.fields import JSONField
 
 from django.db import models
 from django.conf import settings
@@ -37,11 +38,32 @@ class Source(models.Model):
     proxy = models.ForeignKey('ProxyServer', blank=True, null=True)
     user_agent = models.ForeignKey('UserAgent', blank=True, null=True)
 
+    __extractor = None
+
     def __unicode__(self):
         return '%s' % (self.name or self.url)
 
-    def get_extractor(self):
-        return self._extractor
+    @property
+    def extractor(self):
+        if self.__extractor is None:
+            self.__extractor = Extractor(
+                self.url, settings.CRAWL_ROOT,
+                proxies=self.get_proxy(), user_agent=self.get_ua())
+        return self.__extractor
+
+    def get_proxy(self):
+        return self.proxy.get_dict() if self.proxy else None
+
+    def get_ua(self):
+        return self.user_agent.value if self.user_agent else None
+
+    def get_page(self, html_only=True, task_id=None):
+        page = self.extractor._html
+        return create_result(page, task_id)
+
+    def get_links(self, internal_only=True, task_id=None):
+        links = self.extractor.extract_links()
+        return create_result(links, task_id)
 
     def crawl(self, download=True):
         logger.info('')
@@ -56,21 +78,12 @@ class Source(models.Model):
         extrapath = [item.strip() for item in self.extra_xpath.split('\n')
                      if item.strip()]
 
-        proxy = self.proxy.get_dict() if self.proxy else None
-        logger.info('Use proxy server: %s' % self.proxy)
-
-        ua = self.user_agent.value if self.user_agent else None
-        logger.info('Use user agent: %s' % self.user_agent)
-
-        # Initialize extractor
-        self._extractor = Extractor(self.url, settings.CRAWL_ROOT,
-                                    proxies=proxy, user_agent=ua)
         make_root = False
         if self.link_xpath.startswith('/+'):
             make_root = True
             self.link_xpath = self.link_xpath[2:]
 
-        all_links = self._extractor.extract_links(
+        all_links = self.extractor.extract_links(
             xpath=self.link_xpath,
             expand_rules=expand_rules,
             depth=self.crawl_depth,
@@ -92,7 +105,7 @@ class Source(models.Model):
                     logger.info('Download %s' % link_url)
                     location = datetime.now().strftime('%Y/%m/%d')
                     location = os.path.join(settings.CRAWL_ROOT, location)
-                    sub_extr = Extractor(link_url, location, proxy)
+                    sub_extr = Extractor(link_url, location, self.get_proxy())
                     if self.content_type:
                         base_meta = {'type': self.content_type.name}
                     else:
@@ -115,6 +128,32 @@ class Source(models.Model):
             return paths
         else:
             return all_links
+
+
+class Result(models.Model):
+    """This model holds specific ouput information processed by Source.
+    It is implemented for better adapts when called by queuing system."""
+    task_id = models.CharField(max_length=64)
+    data = JSONField()
+    other = models.ForeignKey('LocalContent', null=True, blank=True,
+                              on_delete=models.DO_NOTHING)
+
+    def __unicode__(self):
+        return "Task Result <{}>".format(self.task_id)
+
+
+def create_result(data, task_id=None, local=None):
+    """This will create and return the Result object if task_id is present.
+    Otherwise, the data will be returned."""
+    if task_id:
+        if not isinstance(data, dict):
+            data_dict = {'result': data}
+        res = Result(task_id=task_id, data=data_dict)
+        if local:
+            res.other = local
+        res.save()
+        return res
+    return data
 
 
 class LocalContent(models.Model):
