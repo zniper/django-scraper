@@ -8,126 +8,149 @@ from jsonfield.fields import JSONField
 from django.db import models
 from django.conf import settings
 from django.utils.translation import ugettext_lazy as _
+from django.core.files.storage import default_storage as storage
 
-from utils import Extractor
+from .utils import Extractor
+from .base import BaseCrawl
 
 
 logger = logging.getLogger(__name__)
 
+DATA_TYPES = (
+    ('text', 'Text content'),
+    ('html', 'HTML content'),
+    ('binary', 'Binary content'),
+)
 
-class Source(models.Model):
-    """ This could be a single site or part of a site which contains wanted
-        content
-    """
-    url = models.CharField(max_length=256)
-    name = models.CharField(max_length=256, blank=True, null=True)
-    # Links section
-    link_xpath = models.CharField(max_length=255)
-    expand_rules = models.TextField(blank=True, null=True)
-    crawl_depth = models.PositiveIntegerField(default=1)
-    # Content section
-    content_xpath = models.CharField(max_length=255, blank=True, null=True)
-    content_type = models.ForeignKey('ContentType', blank=True, null=True)
-    meta_xpath = models.TextField(default='', blank=True)
-    extra_xpath = models.TextField(default='', blank=True)
-    refine_rules = models.TextField(default='', blank=True)
-    active = models.BooleanField(default=True)
-    download_image = models.BooleanField(default=True)
+PROTOCOLS = (
+    ('http', 'HTTP'),
+    ('https', 'HTTPS'),
+)
+
+
+class Collector(BaseCrawl):
+    """This could be a single site or part of a site which contains wanted
+    content"""
+    # Basic infomation
+    name = models.CharField(max_length=256)
+    selectors = models.ManyToManyField('Selector', blank=True)
+    get_image = models.BooleanField(default=True, help_text='Download images found \
+        inside extracted content')
+    # Dict of replacing rules (regex & new value):
+    #    replace_rules = [('\<ul\>.*?\<ul\>', ''), ...]
+    replace_rules = JSONField(help_text='List of Regex rules will be applied to \
+        refine data')
     # Extra settings
-    black_words = models.ForeignKey('WordSet', blank=True, null=True)
-    proxy = models.ForeignKey('ProxyServer', blank=True, null=True)
-    user_agent = models.ForeignKey('UserAgent', blank=True, null=True)
-
-    __extractor = None
+    black_words = models.ForeignKey(
+        'WordSet', blank=True, null=True, on_delete=models.PROTECT)
 
     def __unicode__(self):
-        return '%s' % (self.name or self.url)
+        return u'Collector: {}'.format(self.name)
 
-    @property
-    def extractor(self):
-        if self.__extractor is None:
-            self.__extractor = Extractor(
-                self.url, settings.CRAWL_ROOT,
-                proxies=self.get_proxy(), user_agent=self.get_ua())
-        return self.__extractor
-
-    def get_proxy(self):
-        return self.proxy.get_dict() if self.proxy else None
-
-    def get_ua(self):
-        return self.user_agent.value if self.user_agent else None
-
-    def get_page(self, html_only=True, task_id=None):
-        page = self.extractor._html
+    def get_page(self, url, html_only=True, task_id=None):
+        extractor = self.get_extractor(url)
+        page = extractor._html
         return create_result(page, task_id)
 
-    def get_links(self, internal_only=True, task_id=None):
-        links = self.extractor.extract_links()
+    def get_links(self, url, task_id=None):
+        extractor = self.get_extractor(url)
+        links = extractor.extract_links()
         return create_result(links, task_id)
 
+    def get_content(self, url, task_id=None, force=False):
+        """Download the content of a page specified by URL"""
+        # Skip the operation if the local content is present
+        if not force:
+            queryset = LocalContent.objects
+            if queryset.filter(url=url, collector__pk=self.pk).exists():
+                logger.info('Content exists. Bypass %s' % url)
+                return
+
+        logger.info('Download %s' % url)
+
+        # Determine local files location. It musts be unique by collector.
+        collector_id = 'co_{}'.format(self.pk)
+        location = datetime.now().strftime('%Y/%m/%d')
+        location = os.path.join(settings.CRAWL_ROOT, location, collector_id)
+        extractor = self.get_extractor(url, location)
+
+        # Extract content from target pages, so target_xpaths and
+        # expand_xpaths are redundant
+        result_path = extractor.extract_content(
+            get_image=self.get_image,
+            selectors=self.selector_dict,
+            replace_rules=self.replace_rules)
+
+        content = LocalContent(url=url, collector=self, local_path=result_path)
+        content.save()
+        return create_result(content.pk, task_id)
+
+    @property
+    def selector_dict(self):
+        """Convert the self.selectors into dict of XPaths"""
+        data_xpaths = {}
+        for sel in self.selectors.all():
+            data_xpaths[sel.key] = (sel.xpath, sel.data_type)
+        return data_xpaths
+
+
+class Spider(BaseCrawl):
+    """This does work of collecting wanted pages' address, it will auto jump
+    to another page and continue finding. The operation is limited by:
+        crawl_depth: maximum depth of the operation
+        expand_links: list of XPaths to links where searches will be performed
+    """
+    name = models.CharField(max_length=256, blank=True, null=True)
+    url = models.URLField(_('Start URL'), max_length=256, help_text='URL of \
+        the starting page')
+    # Link to different pages, all are XPath
+    target_links = JSONField(help_text='XPaths toward links to pages with content \
+        to be extracted')
+    expand_links = JSONField(help_text='List of links (as XPaths) to other pages \
+        holding target links (will not be extracted)')
+    crawl_depth = models.PositiveIntegerField(default=1, help_text='Set this > 1 \
+        in case of crawling from this page')
+    collectors = models.ManyToManyField(Collector, blank=True)
+
     def crawl(self, download=True):
-        logger.info('')
-        logger.info('Start crawling %s (%s)' % (self.name, self.url))
+        logger.info('\nStart crawling %s (%s)' % (self.name, self.url))
 
-        # Custom definitions
-        metapath = eval(self.meta_xpath) if self.meta_xpath else None
-        expand_rules = self.expand_rules.split('\n') \
-            if self.expand_rules else None
-        refine_rules = [item.strip() for item in self.refine_rules.split('\n')
-                        if item.strip()]
-        extrapath = [item.strip() for item in self.extra_xpath.split('\n')
-                     if item.strip()]
+        extractor = self.get_extractor(self.url)
 
-        make_root = False
-        if self.link_xpath.startswith('/+'):
-            make_root = True
-            self.link_xpath = self.link_xpath[2:]
+        all_links = extractor.extract_links(
+            link_xpaths=self.target_links,
+            expand_xpaths=self.expand_links,
+            depth=self.crawl_depth
+        )
 
-        all_links = self.extractor.extract_links(
-            xpath=self.link_xpath,
-            expand_rules=expand_rules,
-            depth=self.crawl_depth,
-            make_root=make_root)
         logger.info('%d link(s) found' % len(all_links))
 
         # Just dry running or real download
         if download:
-            blacklist = []
-            local_content = []
-            if self.black_words:
-                blacklist = self.black_words.words.split('\n')
+            all_content = []
+            collectors = self.collectors.all()
             for link in all_links:
-                try:
-                    link_url = link['url']
-                    if LocalContent.objects.filter(url=link_url).count():
-                        logger.info('Bypass %s' % link_url)
-                        continue
-                    logger.info('Download %s' % link_url)
-                    location = datetime.now().strftime('%Y/%m/%d')
-                    location = os.path.join(settings.CRAWL_ROOT, location)
-                    sub_extr = Extractor(link_url, location, self.get_proxy())
-                    if self.content_type:
-                        base_meta = {'type': self.content_type.name}
-                    else:
-                        base_meta = None
-                    local_path = sub_extr.extract_content(
-                        self.content_xpath,
-                        with_image=self.download_image,
-                        metapath=metapath,
-                        extrapath=extrapath,
-                        custom_rules=refine_rules,
-                        blacklist=blacklist,
-                        metadata=base_meta)
-                    content = LocalContent(url=link_url, source=self,
-                                           local_path=local_path)
-                    content.save()
-                    local_content.append(content)
-                except:
-                    logger.exception('Error when extracting %s' % link['url'])
-            paths = [lc.local_path for lc in local_content]
-            return paths
+                url = link['url']
+                for collector in collectors:
+                    content = collector.get_content(url)
+                    if content:
+                        all_content.append(content)
+            return all_content
         else:
             return all_links
+
+    def __unicode__(self):
+        return 'Spider: {}'.format(self.name)
+
+
+class Selector(models.Model):
+    """docstring for DataElement"""
+    key = models.SlugField()
+    xpath = models.CharField(max_length=512)
+    data_type = models.CharField(max_length=64, choices=DATA_TYPES)
+
+    def __unicode__(self):
+        return u'Selector: {}'.format(self.key)
 
 
 class Result(models.Model):
@@ -139,7 +162,7 @@ class Result(models.Model):
                               on_delete=models.DO_NOTHING)
 
     def __unicode__(self):
-        return "Task Result <{}>".format(self.task_id)
+        return u'Task Result <{}>'.format(self.task_id)
 
 
 def create_result(data, task_id=None, local=None):
@@ -161,29 +184,28 @@ class LocalContent(models.Model):
         redownloading
     """
     url = models.CharField(max_length=256)
-    source = models.ForeignKey('Source', related_name='content',
-                               blank=True, null=True)
+    collector = models.ForeignKey('Collector')
     local_path = models.CharField(max_length=256)
-    created_time = models.DateTimeField(default=datetime.now,
-                                        blank=True, null=True)
+    created_time = models.DateTimeField(
+        default=datetime.now, blank=True, null=True)
     state = models.IntegerField(default=0)
 
     def __unicode__(self):
-        return 'Local Content: %s' % self.url
+        return u'Local Content: %s' % self.url
 
     def remove_files(self):
+        """Remove all files in storage of this LocalContent instance"""
         self.fresh = False
         try:
-            rmtree(self.local_path)
+            dirs, files = storage.listdir(self.local_path)
+            for fn in files:
+                storage.delete(os.path.join(self.local_path, fn))
         except OSError:
-            pass
+            logger.error('Error when deleting local files in {}'.format(
+                self.local_path))
         self.local_path = ''
         self.state = 1
         self.save()
-
-    def delete(self, **kwargs):
-        self.remove_files()
-        super(LocalContent, self).delete(**kwargs)
 
 
 class WordSet(models.Model):
@@ -202,16 +224,7 @@ class WordSet(models.Model):
         return super(WordSet, self).save(*args, **kwargs)
 
     def __unicode__(self):
-        return 'Words: %s' % self.name
-
-
-class ContentType(models.Model):
-    """ Type assigned to the crawled content. This is not strictly required """
-    name = models.CharField(max_length=64)
-    description = models.TextField(blank=True, null=True)
-
-    def __unicode__(self):
-        return 'Type: %s' % self.name
+        return u'Words: %s' % self.name
 
 
 class UserAgent(models.Model):
@@ -220,13 +233,7 @@ class UserAgent(models.Model):
     value = models.CharField(_('User Agent String'), max_length=256)
 
     def __unicode__(self):
-        return 'User Agent: %s' % self.name
-
-
-PROTOCOLS = (
-    ('http', 'HTTP'),
-    ('https', 'HTTPS'),
-)
+        return u'User Agent: %s' % self.name
 
 
 class ProxyServer(models.Model):
@@ -242,4 +249,4 @@ class ProxyServer(models.Model):
             self.protocol, self.address, self.port)}
 
     def __unicode__(self):
-        return 'Proxy Server: %s' % self.name
+        return u'Proxy Server: %s' % self.name

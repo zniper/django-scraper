@@ -23,6 +23,7 @@ setup(
     install_requires=[
         'requests',
         'lxml',
+        'django-jsonfield==0.9.13'
         ],
 
 )
