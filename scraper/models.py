@@ -1,9 +1,8 @@
-import os
 import logging
 import uuid
 
 from datetime import datetime
-from shutil import rmtree
+from os import path
 from jsonfield.fields import JSONField
 
 from django.db import models
@@ -11,22 +10,10 @@ from django.conf import settings
 from django.utils.translation import ugettext_lazy as _
 from django.core.files.storage import default_storage as storage
 
-from .utils import Extractor
 from .base import BaseCrawl
-
+from .config import DATA_TYPES, PROTOCOLS
 
 logger = logging.getLogger(__name__)
-
-DATA_TYPES = (
-    ('text', 'Text content'),
-    ('html', 'HTML content'),
-    ('binary', 'Binary content'),
-)
-
-PROTOCOLS = (
-    ('http', 'HTTP'),
-    ('https', 'HTTPS'),
-)
 
 
 class Collector(BaseCrawl):
@@ -73,19 +60,19 @@ class Collector(BaseCrawl):
         # Determine local files location. It musts be unique by collector.
         collector_id = 'co_{}'.format(self.pk)
         location = datetime.now().strftime('%Y/%m/%d')
-        location = os.path.join(settings.CRAWL_ROOT, location, collector_id)
+        location = path.join(settings.CRAWL_ROOT, location, collector_id)
         extractor = self.get_extractor(url, location)
 
         # Extract content from target pages, so target_xpaths and
         # expand_xpaths are redundant
-        result_path = extractor.extract_content(
+        result_path, json_data = extractor.extract_content(
             get_image=self.get_image,
             selectors=self.selector_dict,
             replace_rules=self.replace_rules)
 
         content = LocalContent(url=url, collector=self, local_path=result_path)
         content.save()
-        return create_result(data='1', local_content=content)
+        return create_result(data=json_data, local_content=content)
 
     @property
     def selector_dict(self):
@@ -205,7 +192,7 @@ class LocalContent(models.Model):
         try:
             dirs, files = storage.listdir(self.local_path)
             for fn in files:
-                storage.delete(os.path.join(self.local_path, fn))
+                storage.delete(path.join(self.local_path, fn))
         except OSError:
             logger.error('Error when deleting local files in {}'.format(
                 self.local_path))

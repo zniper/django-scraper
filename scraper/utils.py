@@ -8,26 +8,14 @@ import urlparse
 from datetime import datetime
 from requests.exceptions import InvalidSchema, MissingSchema
 from lxml import etree
-from shutil import rmtree
 from hashlib import sha1
 
 from django.core.files.storage import default_storage as storage
 
+from .config import *
+
 
 logger = logging.getLogger(__name__)
-
-EXCLUDED_ATTRIBS = ('html')
-
-INDEX_JSON = 'index.json'
-
-DATETIME_FORMAT = '%Y/%m/%d %H:%I:%S'
-
-refine_rules = [
-    re.compile(r'\s+(class|id)=".*?"', re.IGNORECASE),
-    re.compile(r'<script.*?</script>', re.IGNORECASE),
-    re.compile(r'<a .*?>|</a>', re.IGNORECASE),
-    re.compile(r'<h\d.*</h\d>', re.IGNORECASE),
-]
 
 
 class Extractor(object):
@@ -101,14 +89,11 @@ class Extractor(object):
 
         return all_links
 
-    def extract_content(self, selectors={}, get_image=True,
-                        media_xpaths=[], replace_rules=[], black_words=[],
-                        data=None):
-        """ Download the whole content and images and save to local
-            * data_xpaths = {
-                'key': (xpath_value, data_type),
-                ...
-                }
+    def extract_content(self, selectors={}, get_image=True, replace_rules=[],
+                        black_words=[], data=None):
+        """ Download the whole content and images and save to default storage.
+            Return:
+                (result_dir_path, json_data)
         """
         # Extract metadata
         base_meta = {
@@ -160,13 +145,12 @@ class Extractor(object):
                 if get_image and data_type == 'html':
                     for element in elements:
                         data['images'].extend(self.extract_images(element))
-
         data['content'].update(content)
-
         # Save extracting result
-        self.write_file(INDEX_JSON, json.dumps(data))
+        json_data = json.dumps(data)
+        self.write_file(INDEX_JSON, json_data)
 
-        return self._download_to
+        return (self._download_to, json_data)
 
     def extract_images(self, element, *args, **kwargs):
         """Find all images inside given element and return those URLs"""
@@ -241,7 +225,7 @@ class Extractor(object):
             content = rg.sub('', content)
 
         # then common rules...
-        for rg in refine_rules:
+        for rg in DEFAULT_REPLACE_RULES:
             content = rg.sub('', content)
 
         return content
