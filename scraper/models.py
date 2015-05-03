@@ -46,7 +46,7 @@ class Collector(BaseCrawl):
         links = extractor.extract_links()
         return create_result(links)
 
-    def get_content(self, url, force=False):
+    def get_content(self, url, force=False, task_id=None):
         """Download the content of a page specified by URL"""
         # Skip the operation if the local content is present
         if not force:
@@ -72,7 +72,8 @@ class Collector(BaseCrawl):
 
         content = LocalContent(url=url, collector=self, local_path=result_path)
         content.save()
-        return create_result(data=json_data, local_content=content)
+        return create_result(
+            data=json_data, local_content=content, task_id=task_id)
 
     @property
     def selector_dict(self):
@@ -101,7 +102,7 @@ class Spider(BaseCrawl):
         in case of crawling from this page')
     collectors = models.ManyToManyField(Collector, blank=True)
 
-    def crawl_content(self, download=True):
+    def crawl_content(self, download=True, task_id=None):
         logger.info('\nStart crawling %s (%s)' % (self.name, self.url))
 
         extractor = self.get_extractor(self.url)
@@ -118,10 +119,12 @@ class Spider(BaseCrawl):
         if download:
             results = []
             collectors = self.collectors.all()
+            if task_id is None:
+                task_id = settings.NO_TASK_ID_PREFIX + str(uuid.uuid4())
             for link in all_links:
                 url = link['url']
                 for collector in collectors:
-                    result = collector.get_content(url)
+                    result = collector.get_content(url, task_id=task_id)
                     if result:
                         results.append(result)
             return results
@@ -148,7 +151,7 @@ class Result(models.Model):
     task_id = models.CharField(max_length=64, blank=True, null=True)
     data = JSONField()
     other = models.ForeignKey('LocalContent', null=True, blank=True,
-                              on_delete=models.DO_NOTHING)
+                              on_delete=models.SET_NULL)
 
     def __unicode__(self):
         return u'Task Result <{}>'.format(self.task_id)
