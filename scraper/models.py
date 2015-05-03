@@ -1,5 +1,6 @@
 import os
 import logging
+import uuid
 
 from datetime import datetime
 from shutil import rmtree
@@ -34,15 +35,16 @@ class Collector(BaseCrawl):
     # Basic infomation
     name = models.CharField(max_length=256)
     selectors = models.ManyToManyField('Selector', blank=True)
-    get_image = models.BooleanField(default=True, help_text='Download images found \
-        inside extracted content')
+    get_image = models.BooleanField(
+        default=True,
+        help_text='Download images found inside extracted content')
     # Dict of replacing rules (regex & new value):
     #    replace_rules = [('\<ul\>.*?\<ul\>', ''), ...]
-    replace_rules = JSONField(help_text='List of Regex rules will be applied to \
-        refine data')
+    replace_rules = JSONField(
+        default={},
+        help_text='List of Regex rules will be applied to refine data')
     # Extra settings
-    black_words = models.ForeignKey(
-        'WordSet', blank=True, null=True, on_delete=models.PROTECT)
+    black_words = models.CharField(max_length=256, blank=True, null=True)
 
     def __unicode__(self):
         return u'Collector: {}'.format(self.name)
@@ -50,14 +52,14 @@ class Collector(BaseCrawl):
     def get_page(self, url, html_only=True, task_id=None):
         extractor = self.get_extractor(url)
         page = extractor._html
-        return create_result(page, task_id)
+        return create_result(page)
 
     def get_links(self, url, task_id=None):
         extractor = self.get_extractor(url)
         links = extractor.extract_links()
-        return create_result(links, task_id)
+        return create_result(links)
 
-    def get_content(self, url, task_id=None, force=False):
+    def get_content(self, url, force=False):
         """Download the content of a page specified by URL"""
         # Skip the operation if the local content is present
         if not force:
@@ -83,7 +85,7 @@ class Collector(BaseCrawl):
 
         content = LocalContent(url=url, collector=self, local_path=result_path)
         content.save()
-        return create_result(content.pk, task_id)
+        return create_result(data='1', local_content=content)
 
     @property
     def selector_dict(self):
@@ -112,7 +114,7 @@ class Spider(BaseCrawl):
         in case of crawling from this page')
     collectors = models.ManyToManyField(Collector, blank=True)
 
-    def crawl(self, download=True):
+    def crawl_content(self, download=True):
         logger.info('\nStart crawling %s (%s)' % (self.name, self.url))
 
         extractor = self.get_extractor(self.url)
@@ -127,15 +129,15 @@ class Spider(BaseCrawl):
 
         # Just dry running or real download
         if download:
-            all_content = []
+            results = []
             collectors = self.collectors.all()
             for link in all_links:
                 url = link['url']
                 for collector in collectors:
-                    content = collector.get_content(url)
-                    if content:
-                        all_content.append(content)
-            return all_content
+                    result = collector.get_content(url)
+                    if result:
+                        results.append(result)
+            return results
         else:
             return all_links
 
@@ -156,7 +158,7 @@ class Selector(models.Model):
 class Result(models.Model):
     """This model holds specific ouput information processed by Source.
     It is implemented for better adapts when called by queuing system."""
-    task_id = models.CharField(max_length=64)
+    task_id = models.CharField(max_length=64, blank=True, null=True)
     data = JSONField()
     other = models.ForeignKey('LocalContent', null=True, blank=True,
                               on_delete=models.DO_NOTHING)
@@ -164,19 +166,23 @@ class Result(models.Model):
     def __unicode__(self):
         return u'Task Result <{}>'.format(self.task_id)
 
+    def download(self):
+        pass
 
-def create_result(data, task_id=None, local=None):
-    """This will create and return the Result object if task_id is present.
-    Otherwise, the data will be returned."""
-    if task_id:
-        if not isinstance(data, dict):
-            data_dict = {'result': data}
-        res = Result(task_id=task_id, data=data_dict)
-        if local:
-            res.other = local
-        res.save()
-        return res
-    return data
+
+def create_result(data, task_id=None, local_content=None):
+    """This will create and return the Result object"""
+    if not isinstance(data, dict):
+        data_dict = {'result': data}
+    # If no task_id (from queuing system) provided, new unique ID
+    # with prefix will be generated and used
+    if task_id is None:
+        task_id = settings.NO_TASK_ID_PREFIX + str(uuid.uuid4())
+    res = Result(task_id=task_id, data=data_dict)
+    if local_content:
+        res.other = local_content
+    res.save()
+    return res
 
 
 class LocalContent(models.Model):
@@ -206,25 +212,6 @@ class LocalContent(models.Model):
         self.local_path = ''
         self.state = 1
         self.save()
-
-
-class WordSet(models.Model):
-    """ Class words in to set for filtering purposes """
-    name = models.CharField(max_length=64)
-    words = models.TextField()
-
-    def save(self, *args, **kwargs):
-        """ Normalize all words in set """
-        good_list = []
-        for word in self.words.lower().split('\n'):
-            word = word.strip()
-            if word and word not in good_list:
-                good_list.append(word)
-        self.words = '\n'.join(good_list)
-        return super(WordSet, self).save(*args, **kwargs)
-
-    def __unicode__(self):
-        return u'Words: %s' % self.name
 
 
 class UserAgent(models.Model):
