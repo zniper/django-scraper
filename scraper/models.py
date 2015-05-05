@@ -12,6 +12,9 @@ from django.core.files.storage import default_storage as storage
 
 from .base import BaseCrawl
 from .config import DATA_TYPES, PROTOCOLS
+from .signals import post_crawl, post_scrape
+from .utils import SimpleArchive, get_uuid
+
 
 logger = logging.getLogger(__name__)
 
@@ -39,14 +42,18 @@ class Collector(BaseCrawl):
     def get_page(self, url, html_only=True, task_id=None):
         extractor = self.get_extractor(url)
         page = extractor._html
-        return create_result(page)
+        result = create_result(page)
+        post_scrape.send(self.__class__, result=result)
+        return result
 
     def get_links(self, url, task_id=None):
         extractor = self.get_extractor(url)
         links = extractor.extract_links()
-        return create_result(links)
+        result = create_result(links)
+        post_scrape.send(self.__class__, result=result)
+        return result
 
-    def get_content(self, url, force=False, task_id=None):
+    def get_content(self, url, force=False, task_id=None, archive=None):
         """Download the content of a page specified by URL"""
         # Skip the operation if the local content is present
         if not force:
@@ -68,12 +75,17 @@ class Collector(BaseCrawl):
         result_path, json_data = extractor.extract_content(
             get_image=self.get_image,
             selectors=self.selector_dict,
-            replace_rules=self.replace_rules)
+            replace_rules=self.replace_rules,
+            archive=archive)
 
         content = LocalContent(url=url, collector=self, local_path=result_path)
         content.save()
-        return create_result(
+        result = create_result(
             data=json_data, local_content=content, task_id=task_id)
+
+        post_scrape.send(self.__class__, result=result)
+
+        return result
 
     @property
     def selector_dict(self):
@@ -115,8 +127,13 @@ class Spider(BaseCrawl):
 
         logger.info('%d link(s) found' % len(all_links))
 
-        # Just dry running or real download
         if download:
+            # Create a temp SimpleArchive for storing all crawled files
+            if settings.SCRAPER_COMPRESS_RESULT:
+                archive = SimpleArchive(get_uuid(self.url)+'.zip')
+            else:
+                archive = None
+
             results = []
             collectors = self.collectors.all()
             if task_id is None:
@@ -124,12 +141,30 @@ class Spider(BaseCrawl):
             for link in all_links:
                 url = link['url']
                 for collector in collectors:
-                    result = collector.get_content(url, task_id=task_id)
+                    result = collector.get_content(
+                        url, task_id=task_id, archive=archive)
                     if result:
                         results.append(result)
+
+            # move the archive
+            if settings.SCRAPER_COMPRESS_RESULT and archive:
+                storage_location = path.join(
+                    settings.CRAWL_ROOT,
+                    datetime.now().strftime('%Y/%m/%d'))
+                storage_path = archive.move_to_storage(
+                    storage, storage_location)
+
+                # Update local path of results
+                local_ids = [res.other.pk for res in results]
+                LocalContent.objects.filter(pk__in=local_ids).update(
+                   local_path=storage_path)
+
             return results
         else:
             return all_links
+
+        # Notify some receivers
+        post_crawl.send(self.__class__, task_id=task_id)
 
     def __unicode__(self):
         return 'Spider: {}'.format(self.name)

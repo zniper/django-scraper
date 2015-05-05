@@ -5,12 +5,14 @@ import json
 import logging
 import urlparse
 
+from uuid import uuid4
+from zipfile import ZipFile
 from datetime import datetime
 from requests.exceptions import InvalidSchema, MissingSchema
 from lxml import etree
-from hashlib import sha1
 
 from django.core.files.storage import default_storage as storage
+from django.conf import settings
 
 from .config import *
 
@@ -20,9 +22,10 @@ logger = logging.getLogger(__name__)
 
 class Extractor(object):
     _url = ''
-    _hash_value = ''
-    _download_to = ''
+    _uuid = ''
+    _location = ''
     _html = ''
+    _archive = None
     headers = {}
 
     def __init__(self, url, base_dir='', proxies=None, user_agent=None):
@@ -31,11 +34,11 @@ class Extractor(object):
         if user_agent:
             self.headers['User-Agent'] = user_agent
         self.base_dir = base_dir
-        self.hash_value, self.root = self.parse_content()
-        self.set_location(self.hash_value)
+        self.root = self.parse_content()
+        self.set_location()
 
     def parse_content(self):
-        """ Return hashed value and etree object of target page """
+        """Returns etree._Element object of target page"""
         content = ''
         try:
             response = requests.get(self._url,
@@ -45,16 +48,19 @@ class Extractor(object):
         except (InvalidSchema, MissingSchema):
             with open(self._url, 'r') as target:
                 content = target.read()
-        hash_value = sha1(self._url).hexdigest()
         self._html = content
+        return etree.HTML(content)
 
-        return hash_value, etree.HTML(content)
+    def set_location(self, reset=False):
+        """Determine the path where downloaded files will be stored"""
+        if reset or not self._location:
+            self._uuid = get_uuid(self._url, self.base_dir)
+            self._location = os.path.join(self.base_dir, self._uuid)
+        return self._location
 
-    def set_location(self, location=''):
-        self._download_to = os.path.join(self.base_dir, location)
-
-    def get_location(self):
-        return self._download_to
+    @property
+    def location(self):
+        return self._location
 
     def complete_url(self, path):
         return complete_url(self._url, path)
@@ -90,14 +96,14 @@ class Extractor(object):
         return all_links
 
     def extract_content(self, selectors={}, get_image=True, replace_rules=[],
-                        black_words=[], data=None):
+                        black_words=[], data=None, archive=None):
         """ Download the whole content and images and save to default storage.
             Return:
                 (result_dir_path, json_data)
         """
         # Extract metadata
         base_meta = {
-            'hash': self.hash_value,
+            'uuid': self._uuid,
             'url': self._url,
             'time': print_time(),
             'content': {},
@@ -106,6 +112,12 @@ class Extractor(object):
             }
         data = data or {}
         data.update(base_meta)
+
+        # If file compress is present, all content will be putting there
+        # otherwise a new one will be created
+        if settings.SCRAPER_COMPRESS_RESULT:
+            self._archive = archive if archive else \
+                SimpleArchive(self._uuid+'.zip')
 
         content = {}
         for key in selectors:
@@ -134,7 +146,7 @@ class Extractor(object):
                     if norm_content.find(word) != -1:
                         logger.info('Bad word found (%s). Downloading stopped.'
                                     % word)
-                        # A ROLL BACK CASE SHOULD BE IMPLEMENTED!
+                        # A ROLLBACK CASE SHOULD BE IMPLEMENTED
                         return None
                 # Perfrom replacing in the content
                 if replace_rules:
@@ -145,12 +157,19 @@ class Extractor(object):
                 if get_image and data_type == 'html':
                     for element in elements:
                         data['images'].extend(self.extract_images(element))
-        data['content'].update(content)
+
         # Save extracting result
+        data['content'].update(content)
         json_data = json.dumps(data)
         self.write_file(INDEX_JSON, json_data)
 
-        return (self._download_to, json_data)
+        # Only move to storage if archive was created by Collector
+        if settings.SCRAPER_COMPRESS_RESULT:
+            if archive is None and self._archive:
+                self._archive.move_to_storage(
+                    storage, os.path.dirname(self._location))
+
+        return (self._location, json_data)
 
     def extract_images(self, element, *args, **kwargs):
         """Find all images inside given element and return those URLs"""
@@ -167,24 +186,15 @@ class Extractor(object):
 
     def write_file(self, file_name, content):
         """Write file to selected file storage with given path and content"""
-        mfile = None
-        try:
-            mfile = storage.open(self.get_path(file_name), 'w')
-            mfile.write(content)
-            mfile.close()
-        except IOError:
-            # When directories are not auto being created, exception raised.
-            # Then try to rewrite using the FileSystemStorage
-            os.makedirs(os.path.join(storage.base_location, self._download_to))
-            mfile = storage.open(self.get_path(file_name), 'w')
-            mfile.write(content)
-            mfile.close()
-        return mfile
+        # Get file writing function
+        if self._archive:
+            self._archive.write(os.path.join(self._uuid, file_name), content)
+        else:
+            write_storage_file(storage, self.get_path(file_name), content)
 
     def get_path(self, file_name):
         """ Return full path of file (include containing directory) """
-        return os.path.join(self._download_to,
-                            os.path.basename(file_name))
+        return os.path.join(self._location, os.path.basename(file_name))
 
     def download_file(self, url):
         """ Download file from given url and save to common location """
@@ -268,7 +278,7 @@ def get_single_content(element, data_type):
        isinstance(element, etree._ElementUnicodeResult):
         return element
     if data_type == 'text':
-        #return element.text or ''
+        # Return element.text or ''
         return etree.tounicode(element, method='text')
     elif data_type == 'html':
         return etree.tounicode(element, pretty_print=True)
@@ -290,3 +300,68 @@ def print_time(atime=None, with_time=True):
     except AttributeError:
         pass
     return ''
+
+
+def get_uuid(url='', base_dir=''):
+    """Return whole new and unique ID and make sure not being duplicated
+    if base_dir is provided"""
+    netloc = urlparse.urlsplit(url).netloc
+    duplicated = True
+    while duplicated:
+        value = uuid4().get_hex()
+        uuid = '{}-{}'.format(value, netloc) if netloc else value
+        if base_dir:
+            duplicated = os.path.exists(os.path.join(base_dir, uuid))
+        else:
+            duplicated = False
+    return uuid
+
+
+def write_storage_file(storage, file_path, content):
+    """Write a file with path and content into given storage. This
+    merely tries to support both FileSystem and S3 storage"""
+    try:
+        mfile = storage.open(file_path, 'w')
+        mfile.write(content)
+        mfile.close()
+    except IOError:
+        # When directories are not auto being created, exception raised.
+        # Then try to rewrite using the FileSystemStorage
+        location = os.path.dirname(file_path)
+        os.makedirs(os.path.join(storage.base_location, location))
+        mfile = storage.open(file_path, 'w')
+        mfile.write(content)
+        mfile.close()
+    return file_path
+
+
+class SimpleArchive(object):
+    """This class provides functionalities to create and maintain archive
+    file, which is normally used for storing results."""
+
+    _file = None
+
+    def __init__(self, file_path='', *args, **kwargs):
+        # Generate new file in case of duplicate or missing
+        if not file_path:
+            file_path = get_uuid(base_dir=settings.SCRAPER_TEMP_DIR)
+        full_path = os.path.join(settings.SCRAPER_TEMP_DIR, file_path)
+        if os.path.exists(full_path):
+            raise IOError('Duplicate file name: {}'.format(full_path))
+        self._file = ZipFile(full_path, 'w')
+
+    def write(self, file_name, content):
+        """Write file with content into current archive"""
+        self._file.writestr(file_name, content)
+
+    def finish(self):
+        self._file.close()
+
+    def move_to_storage(self, storage, location):
+        """Move the current archive to given location (dir) in storage.
+        Notice: current ._file will be deleted"""
+        self.finish()
+        content = open(self._file.filename, 'r').read()
+        file_path = os.path.join(location,
+                                 os.path.basename(self._file.filename))
+        return write_storage_file(storage, file_path, content)
