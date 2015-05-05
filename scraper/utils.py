@@ -14,7 +14,7 @@ from lxml import etree
 from django.core.files.storage import default_storage as storage
 from django.conf import settings
 
-from .config import *
+from .config import INDEX_JSON, DEFAULT_REPLACE_RULES, DATETIME_FORMAT
 
 
 logger = logging.getLogger(__name__)
@@ -99,7 +99,7 @@ class Extractor(object):
                         black_words=[], data=None, archive=None):
         """ Download the whole content and images and save to default storage.
             Return:
-                (result_dir_path, json_data)
+                (result_dir_path, {'content': <JSON_DATA>})
         """
         # Extract metadata
         base_meta = {
@@ -118,6 +118,8 @@ class Extractor(object):
         if settings.SCRAPER_COMPRESS_RESULT:
             self._archive = archive if archive else \
                 SimpleArchive(self._uuid+'.zip')
+        elif self._archive:
+            self._archive = False
 
         content = {}
         for key in selectors:
@@ -142,7 +144,7 @@ class Extractor(object):
                 tmp_content = get_content(elements, data_type)
                 # Stop operation if black word found
                 for word in black_words:
-                    norm_content = tmp_content.lower()
+                    norm_content = ' '.join(tmp_content).lower()
                     if norm_content.find(word) != -1:
                         logger.info('Bad word found (%s). Downloading stopped.'
                                     % word)

@@ -1,10 +1,11 @@
 from django.test import TestCase
 from django.conf import settings
+from django.core.files.storage import default_storage as storage
 
 from shutil import rmtree
 
 import os
-import json
+import simplejson as json
 
 from scraper import utils, models
 
@@ -58,23 +59,32 @@ class ExtractorLocalTests(TestCase):
 
     @classmethod
     def tearDownClass(self):
-        location = self.extractor.get_location()
-        if os.path.exists(location):
-            rmtree(location)
+        if os.path.exists(self.extractor.location):
+            rmtree(self.extractor.location)
 
     def tearDown(self):
         self.extractor.set_location(self.current_location)
 
     def setUp(self):
-        self.current_location = self.extractor.get_location()
+        self.current_location = self.extractor.location
 
     def test_parse_content(self):
-        self.assertNotEqual(self.extractor.hash_value, '')
+        self.assertNotEqual(self.extractor._uuid, '')
         self.assertNotEqual(self.extractor.root, None)
 
-    def test_set_location(self):
-        self.extractor.set_location('/new/location')
-        self.assertEquals(self.extractor.get_location(), '/new/location')
+    def test_unchanged_location(self):
+        """Location will not be generated if existing"""
+        old_location = self.extractor.location
+        self.extractor.set_location()
+        self.assertGreater(len(self.extractor.location), 0)
+        self.assertEqual(self.extractor.location, old_location)
+
+    def test_reset_location(self):
+        """Location will not be generated if existing"""
+        old_location = self.extractor.location
+        self.extractor.set_location(reset=True)
+        self.assertGreater(len(self.extractor.location), 0)
+        self.assertNotEqual(self.extractor.location, old_location)
 
     def test_complete_url_no_http(self):
         tmp = self.extractor._url
@@ -105,20 +115,6 @@ class ExtractorLocalTests(TestCase):
         file_path = self.extractor.get_path(__file__)
         self.assertGreater(len(file_path), 0)
 
-    def test_prepare_directory(self):
-        self.extractor.prepare_directory()
-        self.assertEqual(os.path.exists(self.extractor.get_location()), True)
-
-    def test_prepare_directory_existing(self):
-        test_file = os.path.join(self.current_location, 'new_file')
-        self.extractor.prepare_directory()
-        f0 = open(test_file, 'w')
-        f0.close()
-        # recall the prepare directory
-        self.extractor.prepare_directory()
-        self.assertEqual(os.path.exists(self.current_location), True)
-        self.assertEqual(os.path.exists(test_file), False)
-
     def test_refine_content(self):
         with open(get_path('yc.0.html'), 'r') as index:
             content = index.read()
@@ -140,13 +136,11 @@ class ExtractorLocalTests(TestCase):
         self.assertEqual(content, refined)
 
     def test_download_file(self):
-        self.extractor.prepare_directory()
         FILE_URL = DATA_URL + 'simple_page.txt'
         file_name = self.extractor.download_file(FILE_URL)
         self.assertEqual(file_name, 'simple_page.txt')
 
     def test_download_file_failed(self):
-        self.extractor.prepare_directory()
         FILE_URL = DATA_URL + 'not_exist.txt'
         file_name = self.extractor.download_file(FILE_URL)
         self.assertEqual(file_name, None)
@@ -157,73 +151,94 @@ class ExtractorOnlineTests(TestCase):
     @classmethod
     def setUpClass(self):
         self.extractor = utils.Extractor(DATA_URL+'yc.0.html')
+        self.selectors = {
+            'post': ("//div[@id='main']/article[@class='post']", 'text'),
+        }
+        settings.SCRAPER_TEMP_DIR = '/tmp'
 
     @classmethod
     def tearDownClass(self):
-        location = self.extractor.get_location()
-        if os.path.exists(location):
-            rmtree(location)
+        pass
 
     def tearDown(self):
-        self.extractor.set_location(self.current_location)
+        try:
+            rmtree(
+                os.path.join(storage.base_location, self.extractor.location))
+        except OSError:
+            pass
 
     def setUp(self):
-        self.current_location = self.extractor.get_location()
+        settings.SCRAPER_COMPRESS_RESULT = False
+        self.extractor.set_location(reset=True)
 
     def test_extract_content_basic(self):
-        content_xpath = "//div[@id='main']/article[@class='post']"
-        path = self.extractor.extract_content(content_xpath)
-        self.assertEqual(path, self.current_location)
-        self.assertEqual(len(os.listdir(self.current_location)), 3)
+        result = self.extractor.extract_content(self.selectors)
+        self.assertEqual(result[0], self.extractor.location)
+        data = json.loads(result[1])
+        self.assertGreater(len(data['content']['post']), 0)
+        result_path = os.path.join(storage.base_location, result[0])
+        self.assertEqual(os.path.exists(result_path), True)
+
+    def test_extract_content_as_zip(self):
+        settings.SCRAPER_COMPRESS_RESULT = True
+        result = self.extractor.extract_content(self.selectors)
+        self.assertEqual(result[0], self.extractor.location)
+        data = json.loads(result[1])
+        self.assertGreater(len(data['content']['post']), 0)
+        result_path = os.path.join(storage.base_location, result[0]) + '.zip'
+        self.assertEqual(os.path.exists(result_path), True)
 
     def test_extract_content_with_ua(self):
         UA = 'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2228.0 Safari/537.36' 
         self.extractor = utils.Extractor(DATA_URL+'yc.0.html', user_agent=UA)
-        content_xpath = "//div[@id='main']/article[@class='post']"
-        path = self.extractor.extract_content(content_xpath, with_image=False)
-        self.assertEqual(path, self.current_location)
-        self.assertEqual(len(os.listdir(self.current_location)), 2)
+        result = self.extractor.extract_content(self.selectors)
+        self.assertEqual(result[0], self.extractor.location)
+        result_path = os.path.join(storage.base_location, result[0])
+        self.assertEqual(os.path.exists(result_path), True)
 
     def test_extract_content_blackword(self):
-        content_xpath = "//div[@id='main']/article[@class='post']"
         bw = ['panicked', 'phone']
-        path = self.extractor.extract_content(content_xpath, blacklist=bw)
-        self.assertEqual(path, None)
+        result = self.extractor.extract_content(self.selectors, black_words=bw)
+        self.assertEqual(result, None)
 
-    def test_extract_content_no_image(self):
-        content_xpath = "//div[@id='main']/article[@class='post']"
-        path = self.extractor.extract_content(content_xpath, with_image=False)
-        self.assertEqual(path, self.current_location)
-        self.assertEqual(len(os.listdir(self.current_location)), 2)
+    def test_extract_content_with_image(self):
+        custom_selector = {
+            'post': ("//div[@id='main']/article[@class='post']", 'html'),
+        }
+        result = self.extractor.extract_content(custom_selector)
+
+        self.assertEqual(result[0], self.extractor.location)
+        result_path = os.path.join(storage.base_location, result[0])
+        self.assertEqual(len(os.listdir(result_path)), 3)
 
     def test_extract_content_meta(self):
-        content_xpath = "//div[@id='main']/article[@class='post']"
-        metas = {
-            'title': "(//h2/a)[1]/text()",
-        }
-        path = self.extractor.extract_content(
-            content_xpath, metapath=metas, with_image=False)
-        self.assertEqual(path, self.current_location)
+        custom_selectors = self.selectors.copy()
+        custom_selectors['title'] = ("(//h2/a)[1]", 'text')
+        result = self.extractor.extract_content(custom_selectors)
+
+        self.assertEqual(result[0], self.extractor.location)
+        result_path = os.path.join(storage.base_location, result[0])
         # Verify the meta file
-        with open(os.path.join(path, 'index.json'), 'r') as vfile:
+        with open(os.path.join(result_path, 'index.json'), 'r') as vfile:
             values = json.load(vfile)
             self.assertEquals(
-                values['title'],
-                ["Shift Messenger (YC W15) Makes It Easy For Workers To Swap Hours"]
+                values['content']['title'],
+                ["Shift Messenger (YC W15) Makes It Easy For Workers To Swap Hours\n"]
             )
 
     def test_extract_content_extra(self):
-        content_xpath = "//div[@id='main']/article[@class='post']"
-        extra = ['(//img)[1]/@src']
-        path = self.extractor.extract_content(
-            content_xpath, extrapath=extra, with_image=False)
-        self.assertEqual(path, self.current_location)
-        self.assertEqual(len(os.listdir(self.current_location)), 3)
+        custom_selectors = self.selectors.copy()
+        custom_selectors['extra'] = ('(//img)[1]/@src', 'binary')
+        result = self.extractor.extract_content(custom_selectors)
+
+        self.assertEqual(result[0], self.extractor.location)
+        result_path = os.path.join(storage.base_location, result[0])
+        self.assertEqual(len(os.listdir(result_path)), 2)
 
     def test_extract_links_expand(self):
         links = self.extractor.extract_links(
-            "//h2/a",
-            expand_rules=["//a[@rel='next']/@href"],
+            ["//h2/a"],
+            expand_xpaths=["//a[@rel='next']"],
             depth=2
         )
         self.assertEqual(len(links), 23)
