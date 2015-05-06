@@ -39,7 +39,7 @@ class Collector(BaseCrawl):
     black_words = models.CharField(max_length=256, blank=True, null=True)
 
     def __unicode__(self):
-        return u'Collector: {}'.format(self.name)
+        return u'Collector: {0}'.format(self.name)
 
     def get_page(self, url, html_only=True, task_id=None):
         extractor = self.get_extractor(url)
@@ -67,7 +67,7 @@ class Collector(BaseCrawl):
         logger.info('Download %s' % url)
 
         # Determine local files location. It musts be unique by collector.
-        collector_id = 'co_{}'.format(self.pk)
+        collector_id = 'co_{0}'.format(self.pk)
         location = datetime.now().strftime('%Y/%m/%d')
         location = path.join(location, collector_id)
         extractor = self.get_extractor(url, location)
@@ -140,7 +140,7 @@ class Spider(BaseCrawl):
             collectors = self.collectors.all()
             if task_id is None:
                 task_id = settings.SCRAPER_NO_TASK_ID_PREFIX + \
-                          str(uuid.uuid4())
+                    str(uuid.uuid4())
             for link in all_links:
                 url = link['url']
                 for collector in collectors:
@@ -159,7 +159,7 @@ class Spider(BaseCrawl):
                 # Update local path of results
                 local_ids = [res.other.pk for res in results]
                 LocalContent.objects.filter(pk__in=local_ids).update(
-                   local_path=storage_path)
+                    local_path=storage_path)
 
             return results
         else:
@@ -169,7 +169,7 @@ class Spider(BaseCrawl):
         post_crawl.send(self.__class__, task_id=task_id)
 
     def __unicode__(self):
-        return 'Spider: {}'.format(self.name)
+        return 'Spider: {0}'.format(self.name)
 
 
 class Selector(models.Model):
@@ -179,7 +179,7 @@ class Selector(models.Model):
     data_type = models.CharField(max_length=64, choices=DATA_TYPES)
 
     def __unicode__(self):
-        return u'Selector: {}'.format(self.key)
+        return u'Selector: {0}'.format(self.key)
 
 
 class Result(models.Model):
@@ -191,7 +191,7 @@ class Result(models.Model):
                               on_delete=models.SET_NULL)
 
     def __unicode__(self):
-        return u'Task Result <{}>'.format(self.task_id)
+        return u'Task Result <{0}>'.format(self.task_id)
 
     def download(self):
         pass
@@ -234,7 +234,7 @@ class LocalContent(models.Model):
             for fn in files:
                 storage.delete(path.join(self.local_path, fn))
         except OSError:
-            logger.error('Error when deleting local files in {}'.format(
+            logger.error('Error when deleting local files in {0}'.format(
                 self.local_path))
         self.local_path = ''
         self.state = 1

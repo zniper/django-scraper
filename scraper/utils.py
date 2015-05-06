@@ -136,7 +136,7 @@ class Extractor(object):
                     # The element must be string to downloadable target
                     if not (isinstance(url, basestring) and url.strip()):
                         continue
-                    logger.info('Download media object: {}'.format(url))
+                    logger.info('Download media object: {0}'.format(url))
                     description = ''
                     file_name = self.download_file(url)
                     if file_name:
@@ -312,7 +312,7 @@ def get_uuid(url='', base_dir=''):
     duplicated = True
     while duplicated:
         value = uuid4().get_hex()
-        uuid = '{}-{}'.format(value, netloc) if netloc else value
+        uuid = '{0}-{1}'.format(value, netloc) if netloc else value
         if base_dir:
             duplicated = os.path.exists(os.path.join(base_dir, uuid))
         else:
@@ -350,7 +350,7 @@ class SimpleArchive(object):
             file_path = get_uuid(base_dir=settings.SCRAPER_TEMP_DIR)
         full_path = os.path.join(settings.SCRAPER_TEMP_DIR, file_path)
         if os.path.exists(full_path):
-            raise IOError('Duplicate file name: {}'.format(full_path))
+            raise IOError('Duplicate file name: {0}'.format(full_path))
         self._file = ZipFile(full_path, 'w')
 
     def write(self, file_name, content):
