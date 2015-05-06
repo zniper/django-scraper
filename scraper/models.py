@@ -6,9 +6,11 @@ from os import path
 from jsonfield.fields import JSONField
 
 from django.db import models
+from django.db.models.signals import pre_delete
 from django.conf import settings
 from django.utils.translation import ugettext_lazy as _
 from django.core.files.storage import default_storage as storage
+from django.dispatch.dispatcher import receiver
 
 from .base import BaseCrawl
 from .config import DATA_TYPES, PROTOCOLS
@@ -262,3 +264,20 @@ class ProxyServer(models.Model):
 
     def __unicode__(self):
         return u'Proxy Server: %s' % self.name
+
+
+# IT WILL BE BEST IF THESE BELOW COULD BE PLACED INTO SEPARATE MODULE
+
+
+@receiver(pre_delete, sender=LocalContent)
+def clear_local_files(sender, instance, *args, **kwargs):
+    """Ensure all files saved into media dir will be deleted as well"""
+    instance.remove_files()
+
+
+@receiver(pre_delete, sender=Result)
+def remove_result(sender, **kwargs):
+    """Ensure all related local content will be deleted"""
+    result = kwargs['instance']
+    if result.other:
+        result.other.delete()
