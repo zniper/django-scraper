@@ -23,6 +23,12 @@ settings.configure(
         "django.contrib.sites",
         "scraper",
     ],
+    MIDDLEWARE_CLASSES=(
+        'django.contrib.sessions.middleware.SessionMiddleware',
+        'django.middleware.common.CommonMiddleware',
+        'django.contrib.auth.middleware.AuthenticationMiddleware',
+        'django.contrib.auth.middleware.SessionAuthenticationMiddleware',
+        ),
     SITE_ID=1,
     TEMPLATE_DIRS=[
         os.path.abspath(os.path.join(

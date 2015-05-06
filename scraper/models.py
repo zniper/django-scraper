@@ -12,7 +12,8 @@ from django.utils.translation import ugettext_lazy as _
 from django.core.files.storage import default_storage as storage
 from django.dispatch.dispatcher import receiver
 
-from .base import BaseCrawl
+import base
+
 from .config import DATA_TYPES, PROTOCOLS
 from .signals import post_crawl, post_scrape
 from .utils import SimpleArchive, get_uuid
@@ -21,7 +22,7 @@ from .utils import SimpleArchive, get_uuid
 logger = logging.getLogger(__name__)
 
 
-class Collector(BaseCrawl):
+class Collector(base.BaseCrawl):
     """This could be a single site or part of a site which contains wanted
     content"""
     # Basic infomation
@@ -98,7 +99,7 @@ class Collector(BaseCrawl):
         return data_xpaths
 
 
-class Spider(BaseCrawl):
+class Spider(base.BaseCrawl):
     """This does work of collecting wanted pages' address, it will auto jump
     to another page and continue finding. The operation is limited by:
         crawl_depth: maximum depth of the operation
