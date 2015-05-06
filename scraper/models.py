@@ -67,7 +67,7 @@ class Collector(BaseCrawl):
         # Determine local files location. It musts be unique by collector.
         collector_id = 'co_{}'.format(self.pk)
         location = datetime.now().strftime('%Y/%m/%d')
-        location = path.join(settings.CRAWL_ROOT, location, collector_id)
+        location = path.join(location, collector_id)
         extractor = self.get_extractor(url, location)
 
         # Extract content from target pages, so target_xpaths and
@@ -137,7 +137,8 @@ class Spider(BaseCrawl):
             results = []
             collectors = self.collectors.all()
             if task_id is None:
-                task_id = settings.NO_TASK_ID_PREFIX + str(uuid.uuid4())
+                task_id = settings.SCRAPER_NO_TASK_ID_PREFIX + \
+                          str(uuid.uuid4())
             for link in all_links:
                 url = link['url']
                 for collector in collectors:
@@ -149,7 +150,6 @@ class Spider(BaseCrawl):
             # move the archive
             if settings.SCRAPER_COMPRESS_RESULT and archive:
                 storage_location = path.join(
-                    settings.CRAWL_ROOT,
                     datetime.now().strftime('%Y/%m/%d'))
                 storage_path = archive.move_to_storage(
                     storage, storage_location)
@@ -202,7 +202,7 @@ def create_result(data, task_id=None, local_content=None):
     # If no task_id (from queuing system) provided, new unique ID
     # with prefix will be generated and used
     if task_id is None:
-        task_id = settings.NO_TASK_ID_PREFIX + str(uuid.uuid4())
+        task_id = settings.SCRAPER_NO_TASK_ID_PREFIX + str(uuid.uuid4())
     res = Result(task_id=task_id, data=data_dict)
     if local_content:
         res.other = local_content

@@ -33,7 +33,8 @@ class Extractor(object):
         self.proxies = proxies
         if user_agent:
             self.headers['User-Agent'] = user_agent
-        self.base_dir = base_dir
+        self.base_dir = os.path.join(
+            getattr(settings, 'SCRAPER_CRAWL_ROOT', ''), base_dir)
         self.root = self.parse_content()
         self.set_location()
 

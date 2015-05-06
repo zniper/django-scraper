@@ -25,16 +25,22 @@ settings.configure(
     ],
     SITE_ID=1,
     TEMPLATE_DIRS=[
-        os.path.abspath(os.path.join(os.path.dirname(__file__), "scraper", "tests", "templates")),
+        os.path.abspath(os.path.join(
+            os.path.dirname(__file__), "scraper", "tests", "templates")),
     ],
-    CRAWL_ROOT=os.path.join(current_dir, 'crawl'),
+    SCRAPER_CRAWL_ROOT=os.path.join(current_dir, 'crawl'),
+    SCRAPER_TEMP_DIR=os.path.join(current_dir, '/tmp'),
+    SCRAPER_NO_TASK_ID_PREFIX='00-',
+    SCRAPER_COMPRESS_RESULT=False,
 )
 
 
 if hasattr(django, "setup"):
     django.setup()
 
+
 from django_nose import NoseTestSuiteRunner
+
 
 test_runner = NoseTestSuiteRunner(verbosity=1)
 failures = test_runner.run_tests(["scraper"])

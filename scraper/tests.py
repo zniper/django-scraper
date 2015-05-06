@@ -154,22 +154,21 @@ class ExtractorOnlineTests(TestCase):
         self.selectors = {
             'post': ("//div[@id='main']/article[@class='post']", 'text'),
         }
-        settings.SCRAPER_TEMP_DIR = '/tmp'
 
     @classmethod
     def tearDownClass(self):
         pass
 
     def tearDown(self):
-        try:
-            rmtree(
-                os.path.join(storage.base_location, self.extractor.location))
-        except OSError:
-            pass
+        result_path = os.path.join(
+            storage.base_location,
+            self.extractor.location)
+        if os.path.exists(result_path):
+            rmtree(result_path)
 
     def setUp(self):
-        settings.SCRAPER_COMPRESS_RESULT = False
         self.extractor.set_location(reset=True)
+        settings.SCRAPER_COMPRESS_RESULT = False
 
     def test_extract_content_basic(self):
         result = self.extractor.extract_content(self.selectors)
@@ -187,6 +186,11 @@ class ExtractorOnlineTests(TestCase):
         self.assertGreater(len(data['content']['post']), 0)
         result_path = os.path.join(storage.base_location, result[0]) + '.zip'
         self.assertEqual(os.path.exists(result_path), True)
+        settings.SCRAPER_COMPRESS_RESULT = False
+        try:
+            os.remove(result_path)
+        except OSError:
+            pass
 
     def test_extract_content_with_ua(self):
         UA = 'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2228.0 Safari/537.36' 
@@ -255,27 +259,33 @@ class ExtractorOnlineTests(TestCase):
 class ModelSourceTests(TestCase):
 
     def setUp(self):
-        self.args = {
-            'url': DATA_URL+'yc.0.html',
-            'name': 'Test Source',
-            'link_xpath': "//div[@class='post-title']/h2/a",
-            'content_xpath': "//div[@class='post-body']",
-        }
-
-    @classmethod
-    def tearDown(self):
-        if os.path.exists(settings.CRAWL_ROOT):
-            rmtree(settings.CRAWL_ROOT)
+        pass
 
     def test_crawl_basic(self):
-        source = models.Source(**self.args)
-        source.save()
-        self.assertGreater(source.pk, 0)
-        paths = source.crawl()
-        self.assertEqual(len(paths), 3)
+        # Create collector, selectors then spider
+        selector = models.Selector(
+            key='content',
+            xpath="//div[@class='post-body']",
+            data_type='html'
+        )
+        selector.save()
+        collector = models.Collector(name='news-content')
+        collector.save()
+        collector.selectors.add(selector)
+        spider = models.Spider(
+            url=DATA_URL+'yc.0.html',
+            name='Test Source',
+            target_links=["//div[@class='post-title']/h2/a"],
+            crawl_depth=1
+        )
+        spider.save()
+        spider.collectors.add(collector)
+        self.assertGreater(spider.pk, 0)
+        results = spider.crawl_content()
+        self.assertEqual(len(results), 3)
 
-        # Test remove the local content
-        content = source.content.all()[1]
-        self.assertEqual(os.path.exists(content.local_path), True)
-        content.remove_files()
-        self.assertEqual(os.path.exists(content.local_path), False)
+        for result in results:
+            result_path = os.path.join(
+                storage.base_location, result.other.local_path)
+            self.assertEqual(os.path.exists(result_path), True)
+            rmtree(result_path)
