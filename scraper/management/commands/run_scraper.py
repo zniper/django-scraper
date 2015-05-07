@@ -1,12 +1,12 @@
 from django.core.management.base import NoArgsCommand
 
-from scraper.models import Source
+from scraper.models import Spider
 
 
 class Command(NoArgsCommand):
     """ Crawl all active resources """
 
     def handle_noargs(self, **options):
-        sources = Source.objects.filter(active=True)
-        for source in sources:
-            source.crawl()
+        spiders = Spider.objects.all()
+        for spider in spiders:
+            spider.crawl_content()
