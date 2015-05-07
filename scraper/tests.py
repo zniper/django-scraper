@@ -28,6 +28,13 @@ DATA_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)),
 def get_path(file_name):
     return os.path.join(DATA_DIR, file_name)
 
+def exists(path):
+    if storage.exists(path):
+        return True
+    else:
+        parent, name = path.rstrip('/').rsplit('/', 1)
+        res = storage.listdir(parent)
+        return name in res[0] or name in res[1]
 
 class UserAgentTests(TestCase):
 
@@ -160,23 +167,33 @@ class ExtractorOnlineTests(TestCase):
         pass
 
     def tearDown(self):
-        result_path = os.path.join(
-            storage.base_location,
-            self.extractor.location)
-        if os.path.exists(result_path):
-            rmtree(result_path)
+        if hasattr(storage, 'base_location'):
+            result_path = os.path.join(
+                storage.base_location,
+                self.extractor.location)
+            if os.path.exists(result_path):
+                rmtree(result_path)
+        else:
+            if storage.exists(self.extractor.location):
+                storage.delete(self.extractor.location)
 
     def setUp(self):
         self.extractor.set_location(reset=True)
         settings.SCRAPER_COMPRESS_RESULT = False
+
+    def get_path(self, location):
+        if hasattr(storage, 'base_location'):
+            return os.path.join(storage.base_location, self.extractor.location)
+        else:
+            return location
 
     def test_extract_content_basic(self):
         result = self.extractor.extract_content(self.selectors)
         self.assertEqual(result[0], self.extractor.location)
         data = json.loads(result[1])
         self.assertGreater(len(data['content']['post']), 0)
-        result_path = os.path.join(storage.base_location, result[0])
-        self.assertEqual(os.path.exists(result_path), True)
+        result_path = self.get_path(result[0])
+        self.assertEqual(exists(result_path), True)
 
     def test_extract_content_as_zip(self):
         settings.SCRAPER_COMPRESS_RESULT = True
@@ -184,8 +201,8 @@ class ExtractorOnlineTests(TestCase):
         self.assertEqual(result[0], self.extractor.location)
         data = json.loads(result[1])
         self.assertGreater(len(data['content']['post']), 0)
-        result_path = os.path.join(storage.base_location, result[0]) + '.zip'
-        self.assertEqual(os.path.exists(result_path), True)
+        result_path = self.get_path(result[0]) + '.zip'
+        self.assertEqual(exists(result_path), True)
         settings.SCRAPER_COMPRESS_RESULT = False
         try:
             os.remove(result_path)
@@ -197,8 +214,7 @@ class ExtractorOnlineTests(TestCase):
         self.extractor = utils.Extractor(DATA_URL+'yc.0.html', user_agent=UA)
         result = self.extractor.extract_content(self.selectors)
         self.assertEqual(result[0], self.extractor.location)
-        result_path = os.path.join(storage.base_location, result[0])
-        self.assertEqual(os.path.exists(result_path), True)
+        self.assertEqual(exists(result[0]), True)
 
     def test_extract_content_blackword(self):
         bw = ['panicked', 'phone']
@@ -210,10 +226,8 @@ class ExtractorOnlineTests(TestCase):
             'post': ("//div[@id='main']/article[@class='post']", 'html'),
         }
         result = self.extractor.extract_content(custom_selector)
-
         self.assertEqual(result[0], self.extractor.location)
-        result_path = os.path.join(storage.base_location, result[0])
-        self.assertEqual(len(os.listdir(result_path)), 3)
+        self.assertEqual(len(storage.listdir(result[0])[1]), 3)
 
     def test_extract_content_meta(self):
         custom_selectors = self.selectors.copy()
@@ -221,9 +235,8 @@ class ExtractorOnlineTests(TestCase):
         result = self.extractor.extract_content(custom_selectors)
 
         self.assertEqual(result[0], self.extractor.location)
-        result_path = os.path.join(storage.base_location, result[0])
         # Verify the meta file
-        with open(os.path.join(result_path, 'index.json'), 'r') as vfile:
+        with storage.open(os.path.join(result[0], 'index.json'), 'r') as vfile:
             values = json.load(vfile)
             self.assertEquals(
                 values['content']['title'],
@@ -236,8 +249,7 @@ class ExtractorOnlineTests(TestCase):
         result = self.extractor.extract_content(custom_selectors)
 
         self.assertEqual(result[0], self.extractor.location)
-        result_path = os.path.join(storage.base_location, result[0])
-        self.assertEqual(len(os.listdir(result_path)), 2)
+        self.assertEqual(len(storage.listdir(result[0])), 2)
 
     def test_extract_links_expand(self):
         links = self.extractor.extract_links(
@@ -260,6 +272,12 @@ class ModelSourceTests(TestCase):
 
     def setUp(self):
         pass
+
+    def get_path(self, location):
+        if hasattr(storage, 'base_location'):
+            return os.path.join(storage.base_location, location)
+        else:
+            return location
 
     def test_crawl_basic(self):
         # Create collector, selectors then spider
@@ -285,7 +303,10 @@ class ModelSourceTests(TestCase):
         self.assertEqual(len(results), 3)
 
         for result in results:
-            result_path = os.path.join(
-                storage.base_location, result.other.local_path)
-            self.assertEqual(os.path.exists(result_path), True)
-            rmtree(result_path)
+            result_path = result.other.local_path
+            self.assertEqual(exists(result_path), True)
+            if hasattr(storage, 'base_location'):
+                rmtree(self.get_path(result_path))
+            else:
+                if storage.exists(result_path):
+                    storage.delete(result_path)
