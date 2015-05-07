@@ -42,7 +42,7 @@ class Collector(base.BaseCrawl):
     def __unicode__(self):
         return u'Collector: {0}'.format(self.name)
 
-    def get_page(self, url, html_only=True, task_id=None):
+    def get_page(self, url, task_id=None):
         extractor = self.get_extractor(url)
         page = extractor._html
         result = create_result(page)

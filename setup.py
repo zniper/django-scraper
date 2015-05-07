@@ -18,7 +18,8 @@ setup(
     url='https://github.com/zniper/django-scraper',
     author='Ha Pham',
     author_email='me@zniper.net',
-    packages=['scraper', 'scraper.management.commands', 'scraper.migrations'],
+    packages=['scraper', 'scraper.management', 'scraper.management.commands',
+              'scraper.migrations'],
     keywords='crawl scraper spider web pages data extract collect',
     install_requires=[
         'requests',
