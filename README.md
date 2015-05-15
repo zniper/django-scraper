@@ -95,10 +95,7 @@ From version 0.3.0, there is no more `Source`. It's kind of broken into new mode
 * `replace_rules` - RegEx List of regular expressions will be applied to content to remove redundant data.
 
     *Example:*
-        [      
-            ('<br/?>', ''),
-            ('&nbsp;', '')
-        ]
+        [('`<br/?>`', ''), ('`&nbsp;`', '')]
 
 * `black_words` - Select set of words separated by comma. A page will not be downloaded if containing one of those words.
 * `proxy` - Proxy server will be used when crawling current source
