@@ -45,14 +45,14 @@ class Collector(base.BaseCrawl):
     def get_page(self, url, task_id=None):
         extractor = self.get_extractor(url)
         page = extractor._html
-        result = create_result(page)
+        result = create_result(page, task_id)
         post_scrape.send(self.__class__, result=result)
         return result
 
     def get_links(self, url, task_id=None):
         extractor = self.get_extractor(url)
         links = extractor.extract_links()
-        result = create_result(links)
+        result = create_result(links, task_id)
         post_scrape.send(self.__class__, result=result)
         return result
 
