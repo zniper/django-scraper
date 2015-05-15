@@ -360,11 +360,18 @@ class SimpleArchive(object):
     def finish(self):
         self._file.close()
 
-    def move_to_storage(self, storage, location):
+    def move_to_storage(self, storage, location, use_root=True):
         """Move the current archive to given location (dir) in storage.
         Notice: current ._file will be deleted"""
         self.finish()
         content = open(self._file.filename, 'r').read()
+        # Check for root location
+        crawl_location = getattr(settings, 'SCRAPER_CRAWL_ROOT', '')
+        if use_root and crawl_location and location.find(crawl_location) != 0:
+            location = os.path.join(crawl_location, location)
         file_path = os.path.join(location,
                                  os.path.basename(self._file.filename))
         return write_storage_file(storage, file_path, content)
+
+    def __str__(self):
+        return 'SimpleArchive ({})'.format(self._file.filename)

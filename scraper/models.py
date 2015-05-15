@@ -150,8 +150,12 @@ class Spider(base.BaseCrawl):
                     if result:
                         results.append(result)
 
-            # move the archive
+            # Move the archive
             if settings.SCRAPER_COMPRESS_RESULT and archive:
+
+                logger.info('Move result ({}) to default storage'.format(
+                    archive))
+
                 storage_location = path.join(
                     datetime.now().strftime('%Y/%m/%d'))
                 storage_path = archive.move_to_storage(
