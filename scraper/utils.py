@@ -123,7 +123,7 @@ class Extractor(object):
         if settings.SCRAPER_COMPRESS_RESULT:
             self._archive = archive or SimpleArchive(
                 self._uuid+'.zip',
-                base_dir=getattr(settings.SCRAPER_TEMP_DIR, '')
+                base_dir=settings.SCRAPER_TEMP_DIR
             )
         elif self._archive:
             self._archive = False

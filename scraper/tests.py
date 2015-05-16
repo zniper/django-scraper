@@ -314,19 +314,21 @@ class ModelSpiderTests(TestCase):
 
 class SimpleArchiveTestCase(TestCase):
 
-    base_dir = 'test-simplearchive'
+    base_dir = 'test-simplearchive-tmp'
+    storage_dir = 'test-simplearchive-storage'
 
     @classmethod
     def setUpClass(self):
         os.makedirs(self.base_dir)
+        os.makedirs(self.storage_dir)
 
     @classmethod
     def tearDownClass(self):
         rmtree(self.base_dir)
         try:
-            storage.delete(self.base_dir)
+            storage.delete(self.storage_dir)
         except:
-            rmtree(os.path.join(storage.base_location, self.base_dir))
+            rmtree(os.path.join(storage.base_location, self.storage_dir))
 
     def test_create_archive(self):
         """ Test creating a normal and small archive """
@@ -349,8 +351,8 @@ class SimpleArchiveTestCase(TestCase):
         zip_path = os.path.join(self.base_dir, zip_name)
         arch = utils.SimpleArchive(zip_path)
         arch.write('index.json', '{}')
-        new_path = arch.move_to_storage(storage, self.base_dir, remove=False)
-        expected_file = os.path.join(self.base_dir, zip_name)
+        new_path = arch.move_to_storage(storage, self.storage_dir, remove=False)
+        expected_file = os.path.join(self.storage_dir, zip_name)
         self.assertEqual(expected_file, new_path)
         self.assertEqual(storage.exists(expected_file), True)
         self.assertEqual(os.path.exists(zip_path), True)
@@ -361,8 +363,9 @@ class SimpleArchiveTestCase(TestCase):
         zip_path = os.path.join(self.base_dir, zip_name)
         arch = utils.SimpleArchive(zip_path)
         arch.write('index.json', '{}')
-        new_path = arch.move_to_storage(storage, self.base_dir, remove=True)
-        expected_file = os.path.join(self.base_dir, zip_name)
+        new_path = arch.move_to_storage(
+            storage, self.storage_dir, remove=True)
+        expected_file = os.path.join(self.storage_dir, zip_name)
         self.assertEqual(expected_file, new_path)
         self.assertEqual(storage.exists(expected_file), True)
         self.assertEqual(os.path.exists(zip_path), False)
