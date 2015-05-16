@@ -5,6 +5,7 @@ import json
 import logging
 import urlparse
 
+from os.path import join
 from uuid import uuid4
 from zipfile import ZipFile
 from datetime import datetime
@@ -33,8 +34,11 @@ class Extractor(object):
         self.proxies = proxies
         if user_agent:
             self.headers['User-Agent'] = user_agent
-        self.base_dir = os.path.join(
-            getattr(settings, 'SCRAPER_CRAWL_ROOT', ''), base_dir)
+        crawl_root = settings.SCRAPER_CRAWL_ROOT
+        if base_dir.strip().find(crawl_root) != 0:
+            self.base_dir = os.path.join(crawl_root, base_dir)
+        else:
+            self.base_dir = base_dir
         self.root = self.parse_content()
         self.set_location()
 
@@ -117,8 +121,10 @@ class Extractor(object):
         # If file compress is present, all content will be putting there
         # otherwise a new one will be created
         if settings.SCRAPER_COMPRESS_RESULT:
-            self._archive = archive if archive else \
-                SimpleArchive(self._uuid+'.zip')
+            self._archive = archive or SimpleArchive(
+                self._uuid+'.zip',
+                base_dir=getattr(settings.SCRAPER_TEMP_DIR, '')
+            )
         elif self._archive:
             self._archive = False
 
@@ -167,10 +173,9 @@ class Extractor(object):
         self.write_file(INDEX_JSON, json_data)
 
         # Only move to storage if archive was created by Collector
-        if settings.SCRAPER_COMPRESS_RESULT:
-            if archive is None and self._archive:
-                self._archive.move_to_storage(
-                    storage, os.path.dirname(self._location))
+        if archive is None and self._archive:
+            self._archive.move_to_storage(
+                storage, os.path.dirname(self._location))
 
         return (self._location, json_data)
 
@@ -191,13 +196,13 @@ class Extractor(object):
         """Write file to selected file storage with given path and content"""
         # Get file writing function
         if self._archive:
-            self._archive.write(os.path.join(self._uuid, file_name), content)
+            self._archive.write(join(self._uuid, file_name), content)
         else:
             write_storage_file(storage, self.get_path(file_name), content)
 
     def get_path(self, file_name):
         """ Return full path of file (include containing directory) """
-        return os.path.join(self._location, os.path.basename(file_name))
+        return join(self._location, os.path.basename(file_name))
 
     def download_file(self, url):
         """ Download file from given url and save to common location """
@@ -314,15 +319,15 @@ def get_uuid(url='', base_dir=''):
         value = uuid4().get_hex()
         uuid = '{0}-{1}'.format(value, netloc) if netloc else value
         if base_dir:
-            duplicated = os.path.exists(os.path.join(base_dir, uuid))
+            duplicated = os.path.exists(join(base_dir, uuid))
         else:
             duplicated = False
     return uuid
 
 
 def write_storage_file(storage, file_path, content):
-    """Write a file with path and content into given storage. This
-    merely tries to support both FileSystem and S3 storage"""
+    """ Write a file with path and content into given storage. This
+    merely tries to support both FileSystem and S3 storage """
     try:
         mfile = storage.open(file_path, 'w')
         mfile.write(content)
@@ -331,7 +336,7 @@ def write_storage_file(storage, file_path, content):
         # When directories are not auto being created, exception raised.
         # Then try to rewrite using the FileSystemStorage
         location = os.path.dirname(file_path)
-        os.makedirs(os.path.join(storage.base_location, location))
+        os.makedirs(join(storage.base_location, location))
         mfile = storage.open(file_path, 'w')
         mfile.write(content)
         mfile.close()
@@ -339,39 +344,50 @@ def write_storage_file(storage, file_path, content):
 
 
 class SimpleArchive(object):
-    """This class provides functionalities to create and maintain archive
-    file, which is normally used for storing results."""
+    """ This class provides functionalities to create and maintain archive
+    file, which is normally used for storing results. """
 
     _file = None
 
-    def __init__(self, file_path='', *args, **kwargs):
+    def __init__(self, file_path='', base_dir='', *args, **kwargs):
         # Generate new file in case of duplicate or missing
         if not file_path:
-            file_path = get_uuid(base_dir=settings.SCRAPER_TEMP_DIR)
-        full_path = os.path.join(settings.SCRAPER_TEMP_DIR, file_path)
+            file_path = get_uuid(base_dir=base_dir)
+        full_path = join(base_dir, file_path)
         if os.path.exists(full_path):
-            raise IOError('Duplicate file name: {0}'.format(full_path))
+            os.remove(full_path)
         self._file = ZipFile(full_path, 'w')
 
     def write(self, file_name, content):
-        """Write file with content into current archive"""
+        """ Write file with content into current archive """
         self._file.writestr(file_name, content)
 
     def finish(self):
         self._file.close()
 
-    def move_to_storage(self, storage, location, use_root=True):
-        """Move the current archive to given location (dir) in storage.
-        Notice: current ._file will be deleted"""
+    def move_to_storage(self, storage, location, remove=True):
+        """ Move the current archive to given location (directory) in storage.
+
+            storage: Instance of the file storage (FileSystemStorage,...)
+            location: Absolute path where the file will be placed into.
+            remove: Option to remove the current file after moved or not.
+        """
         self.finish()
+
         content = open(self._file.filename, 'r').read()
-        # Check for root location
-        crawl_location = getattr(settings, 'SCRAPER_CRAWL_ROOT', '')
-        if use_root and crawl_location and location.find(crawl_location) != 0:
-            location = os.path.join(crawl_location, location)
-        file_path = os.path.join(location,
-                                 os.path.basename(self._file.filename))
-        return write_storage_file(storage, file_path, content)
+        file_path = join(location, os.path.basename(self._file.filename))
+        saved_path = write_storage_file(storage, file_path, content)
+
+        # Remove file if successful
+        if remove and saved_path:
+            try:
+                os.remove(self._file.filename)
+                self._file = None
+            except OSError:
+                logger.error('Error when removing temporary file: {}'.format(
+                    self._file.filename))
+        return saved_path
 
     def __str__(self):
-        return 'SimpleArchive ({})'.format(self._file.filename)
+        dsc = self._file.filename if self._file else '_REMOVED_'
+        return 'SimpleArchive ({})'.format(dsc)

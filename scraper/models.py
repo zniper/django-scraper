@@ -130,10 +130,11 @@ class Spider(base.BaseCrawl):
 
         logger.info('%d link(s) found' % len(all_links))
 
-        if download:
+        if download and all_links:
             # Create a temp SimpleArchive for storing all crawled files
             if settings.SCRAPER_COMPRESS_RESULT:
-                archive = SimpleArchive(get_uuid(self.url)+'.zip')
+                archive = SimpleArchive(
+                    get_uuid(self.url)+'.zip', settings.SCRAPER_TEMP_DIR)
             else:
                 archive = None
 
@@ -157,6 +158,7 @@ class Spider(base.BaseCrawl):
                     archive))
 
                 storage_location = path.join(
+                    settings.SCRAPER_CRAWL_ROOT,
                     datetime.now().strftime('%Y/%m/%d'))
                 storage_path = archive.move_to_storage(
                     storage, storage_location)

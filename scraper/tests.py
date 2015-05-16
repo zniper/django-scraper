@@ -2,10 +2,10 @@ from django.test import TestCase
 from django.conf import settings
 from django.core.files.storage import default_storage as storage
 
-from shutil import rmtree
-
 import os
 import simplejson as json
+from shutil import rmtree
+from zipfile import ZipFile
 
 from scraper import utils, models
 
@@ -268,7 +268,7 @@ class ExtractorOnlineTests(TestCase):
                          'CloudMedx (YC W15) Helps Doctors Spot Patients Who Will Need Expensive Treatment')
 
 
-class ModelSourceTests(TestCase):
+class ModelSpiderTests(TestCase):
 
     def setUp(self):
         pass
@@ -310,3 +310,59 @@ class ModelSourceTests(TestCase):
             else:
                 if storage.exists(result_path):
                     storage.delete(result_path)
+
+
+class SimpleArchiveTestCase(TestCase):
+
+    base_dir = 'test-simplearchive'
+
+    @classmethod
+    def setUpClass(self):
+        os.makedirs(self.base_dir)
+
+    @classmethod
+    def tearDownClass(self):
+        rmtree(self.base_dir)
+        try:
+            storage.delete(self.base_dir)
+        except:
+            rmtree(os.path.join(storage.base_location, self.base_dir))
+
+    def test_create_archive(self):
+        """ Test creating a normal and small archive """
+        zip_name = self.id() + '.zip'
+        zip_path = os.path.join(self.base_dir, zip_name)
+        arch = utils.SimpleArchive(zip_path)
+        sample_content = 'Hey there!'
+        arch.write('01.py', sample_content)
+        arch.write('02.py', sample_content)
+        arch.finish()
+        self.assertEqual(os.path.exists(zip_path), True)
+        zfile = ZipFile(zip_path, 'r')
+        files = zfile.namelist()
+        self.assertIn('01.py', files)
+        self.assertIn('02.py', files)
+
+    def test_move_to_storage_keep(self):
+        """ Moving to storage and still keeping the old file """
+        zip_name = self.id() + '.zip'
+        zip_path = os.path.join(self.base_dir, zip_name)
+        arch = utils.SimpleArchive(zip_path)
+        arch.write('index.json', '{}')
+        new_path = arch.move_to_storage(storage, self.base_dir, remove=False)
+        expected_file = os.path.join(self.base_dir, zip_name)
+        self.assertEqual(expected_file, new_path)
+        self.assertEqual(storage.exists(expected_file), True)
+        self.assertEqual(os.path.exists(zip_path), True)
+
+    def test_move_to_storage_remove(self):
+        """ Moving to storage and still keeping the old file """
+        zip_name = self.id() + '.zip'
+        zip_path = os.path.join(self.base_dir, zip_name)
+        arch = utils.SimpleArchive(zip_path)
+        arch.write('index.json', '{}')
+        new_path = arch.move_to_storage(storage, self.base_dir, remove=True)
+        expected_file = os.path.join(self.base_dir, zip_name)
+        self.assertEqual(expected_file, new_path)
+        self.assertEqual(storage.exists(expected_file), True)
+        self.assertEqual(os.path.exists(zip_path), False)
