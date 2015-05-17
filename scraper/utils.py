@@ -174,8 +174,9 @@ class Extractor(object):
 
         # Only move to storage if archive was created by Collector
         if archive is None and self._archive:
-            self._archive.move_to_storage(
+            new_path = self._archive.move_to_storage(
                 storage, os.path.dirname(self._location))
+            self._location = new_path
 
         return (self._location, json_data)
 
@@ -367,10 +368,12 @@ class SimpleArchive(object):
 
     def move_to_storage(self, storage, location, remove=True):
         """ Move the current archive to given location (directory) in storage.
-
+        Arguments:
             storage: Instance of the file storage (FileSystemStorage,...)
             location: Absolute path where the file will be placed into.
             remove: Option to remove the current file after moved or not.
+        Returns:
+            Path of file in storage
         """
         self.finish()
 
