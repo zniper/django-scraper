@@ -172,7 +172,10 @@ class ExtractorOnlineTests(TestCase):
                 storage.base_location,
                 self.extractor.location)
             if os.path.exists(result_path):
-                rmtree(result_path)
+                if os.path.isdir(result_path):
+                    rmtree(result_path)
+                else:
+                    os.remove(result_path)
         else:
             if storage.exists(self.extractor.location):
                 storage.delete(self.extractor.location)
@@ -201,7 +204,7 @@ class ExtractorOnlineTests(TestCase):
         self.assertEqual(result[0], self.extractor.location)
         data = json.loads(result[1])
         self.assertGreater(len(data['content']['post']), 0)
-        result_path = self.get_path(result[0]) + '.zip'
+        result_path = self.get_path(result[0])
         self.assertEqual(exists(result_path), True)
         settings.SCRAPER_COMPRESS_RESULT = False
         try:
