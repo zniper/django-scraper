@@ -8,6 +8,7 @@ from shutil import rmtree
 from zipfile import ZipFile
 
 from scraper import utils, models
+from scraper.extractor import Extractor
 
 
 LOCAL_HOST = 'http://127.0.0.1:8000/'
@@ -62,7 +63,7 @@ class ExtractorLocalTests(TestCase):
     @classmethod
     def setUpClass(self):
         target_file = get_path('yc.0.html')
-        self.extractor = utils.Extractor(target_file)
+        self.extractor = Extractor(target_file)
 
     @classmethod
     def tearDownClass(self):
@@ -157,7 +158,7 @@ class ExtractorOnlineTests(TestCase):
 
     @classmethod
     def setUpClass(self):
-        self.extractor = utils.Extractor(DATA_URL+'yc.0.html')
+        self.extractor = Extractor(DATA_URL+'yc.0.html')
         self.selectors = {
             'post': ("//div[@id='main']/article[@class='post']", 'text'),
         }
@@ -198,6 +199,16 @@ class ExtractorOnlineTests(TestCase):
         result_path = self.get_path(result[0])
         self.assertEqual(exists(result_path), True)
 
+    def test_extract_content_tbody(self):
+        selectors = {
+            'post': ("//div[@id='main']/tbody/article[@class='post']", 'text')}
+        result = self.extractor.extract_content(selectors)
+        self.assertEqual(result[0], self.extractor.location)
+        data = json.loads(result[1])
+        self.assertGreater(len(data['content']['post']), 0)
+        result_path = self.get_path(result[0])
+        self.assertEqual(exists(result_path), True)
+
     def test_extract_content_as_zip(self):
         settings.SCRAPER_COMPRESS_RESULT = True
         result = self.extractor.extract_content(self.selectors)
@@ -214,7 +225,7 @@ class ExtractorOnlineTests(TestCase):
 
     def test_extract_content_with_ua(self):
         UA = 'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2228.0 Safari/537.36' 
-        self.extractor = utils.Extractor(DATA_URL+'yc.0.html', user_agent=UA)
+        self.extractor = Extractor(DATA_URL+'yc.0.html', user_agent=UA)
         result = self.extractor.extract_content(self.selectors)
         self.assertEqual(result[0], self.extractor.location)
         self.assertEqual(exists(result[0]), True)

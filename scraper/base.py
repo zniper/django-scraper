@@ -1,7 +1,7 @@
 import urlparse
 from django.db import models
 
-from utils import Extractor
+from .extractor import Extractor
 
 
 class BaseCrawl(models.Model):
