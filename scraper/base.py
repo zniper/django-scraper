@@ -33,7 +33,7 @@ class BaseCrawl(models.Model):
             )
             return extractor
         else:
-            logger.error('Cannot get Extractor due to invalid URL: {}'.format(
+            logger.error('Cannot get Extractor due to invalid URL: {0}'.format(
                 url))
 
     @property

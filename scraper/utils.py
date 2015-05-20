@@ -203,10 +203,10 @@ class SimpleArchive(object):
                 os.remove(self._file.filename)
                 self._file = None
             except OSError:
-                logger.error('Error when removing temporary file: {}'.format(
+                logger.error('Error when removing temporary file: {0}'.format(
                     self._file.filename))
         return saved_path
 
     def __str__(self):
         dsc = self._file.filename if self._file else '_REMOVED_'
-        return 'SimpleArchive ({})'.format(dsc)
+        return 'SimpleArchive ({0})'.format(dsc)
