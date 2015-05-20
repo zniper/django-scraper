@@ -189,7 +189,7 @@ class Extractor(object):
                 mfile.write(content)
             return file_path
         except OSError:
-            logger.exception('Cannot create file: {}'.format(file_path))
+            logger.exception('Cannot create file: {0}'.format(file_path))
 
     def get_path(self, file_name):
         """ Return full path of file (include containing directory) """

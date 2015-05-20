@@ -195,7 +195,7 @@ class Spider(base.BaseCrawl):
 
             # Move the archive
             if archive:
-                logger.info('Move result ({}) to default storage'.format(
+                logger.info('Move result ({0}) to default storage'.format(
                     archive))
                 storage_path = archive.move_to_storage(
                     storage, self.storage_location)
