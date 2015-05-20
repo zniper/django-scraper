@@ -1,6 +1,7 @@
 import os
 import logging
 import urlparse
+import simplejson as json
 
 from os.path import join
 from uuid import uuid4
@@ -8,10 +9,55 @@ from zipfile import ZipFile
 from datetime import datetime
 from lxml import etree
 
+from django.utils.functional import cached_property
+
 from .config import DATETIME_FORMAT
 
 
 logger = logging.getLogger(__name__)
+
+
+class JSONResult(object):
+    """ Provide better way to produce JSON result, which will be put into
+    index.json and stored along with result objects """
+
+    def __init__(self, action, *args, **kwargs):
+        self.action = action
+        self.uuid = kwargs.get('uuid') or kwargs.get('id')
+        self.task = kwargs.get('task_id')
+        self.url = kwargs.get('url')
+        self.start = kwargs.get('start') or datetime.now()
+        self.end = kwargs.get('end') or None
+        self.content = kwargs.get('content')
+        self.media = kwargs.get('media') or []
+        self.images = kwargs.get('images') or []
+
+    @property
+    def dict(self):
+        if self.end is None:
+            self.end = datetime.now()
+        result = {
+            'id': self.uuid,
+            'task': self.task,
+            'url': self.url,
+            'action': self.action,
+            'start': print_time(self.start),
+            'end': print_time(self.end),
+            'content': self.content,
+            'images': self.images,
+            'media': self.media,
+        }
+        return result
+
+    def update(self, **kwargs):
+        """ Update this object data with provided dictionary """
+        for key in kwargs:
+            self.__setattr__(key, kwargs[key])
+
+    @cached_property
+    def json(self):
+        """ Return as pretty JSON """
+        return json.dumps(self.dict, indent=2)
 
 
 def complete_url(base, link):
@@ -67,6 +113,8 @@ def get_content(elements, data_type='html'):
 
 def print_time(atime=None, with_time=True):
     """Return string friendly value of given time"""
+    if isinstance(atime, basestring):
+        return atime
     atime = atime or datetime.now()
     try:
         return atime.strftime(DATETIME_FORMAT)
@@ -75,13 +123,17 @@ def print_time(atime=None, with_time=True):
     return ''
 
 
-def get_uuid(url='', base_dir=''):
-    """Return whole new and unique ID and make sure not being duplicated
-    if base_dir is provided"""
+def get_uuid(url='', base_dir='', size=8):
+    """ Return whole new and unique ID and make sure not being duplicated
+    if base_dir is provided
+        url (optional) - Address of related page
+        base_dir (optional) - Directory path to check for duplication
+        size (optional) - Size of the UUID prefix
+    """
     netloc = urlparse.urlsplit(url).netloc
     duplicated = True
     while duplicated:
-        value = uuid4().get_hex()
+        value = uuid4().get_hex()[:size]
         uuid = '{0}-{1}'.format(value, netloc) if netloc else value
         if base_dir:
             duplicated = os.path.exists(join(base_dir, uuid))
@@ -118,10 +170,10 @@ class SimpleArchive(object):
         # Generate new file in case of duplicate or missing
         if not file_path:
             file_path = get_uuid(base_dir=base_dir)
-        full_path = join(base_dir, file_path)
-        if os.path.exists(full_path):
-            os.remove(full_path)
-        self._file = ZipFile(full_path, 'w')
+        self.file_path = join(base_dir, file_path)
+        if os.path.exists(self.file_path):
+            os.remove(self.file_path)
+        self._file = ZipFile(self.file_path, 'w')
 
     def write(self, file_name, content):
         """ Write file with content into current archive """

@@ -1,7 +1,15 @@
 import urlparse
+import os
+
+from datetime import datetime
+
 from django.db import models
+from django.utils.log import getLogger
 
 from .extractor import Extractor
+from .config import CRAWL_ROOT
+
+logger = getLogger('scraper')
 
 
 class BaseCrawl(models.Model):
@@ -10,6 +18,7 @@ class BaseCrawl(models.Model):
         'ProxyServer', blank=True, null=True, on_delete=models.PROTECT)
     user_agent = models.ForeignKey(
         'UserAgent', blank=True, null=True, on_delete=models.PROTECT)
+    _storage_location = None
 
     def get_extractor(self, url, base_dir=''):
         """Return Extractor instance with given URL. If URL invalid, None will be
@@ -23,6 +32,17 @@ class BaseCrawl(models.Model):
                 user_agent=self.get_ua()
             )
             return extractor
+        else:
+            logger.error('Cannot get Extractor due to invalid URL: {}'.format(
+                url))
+
+    @property
+    def storage_location(self):
+        """docstring for storage_location"""
+        if not self._storage_location:
+            self._storage_location = os.path.join(
+                CRAWL_ROOT, datetime.now().strftime('%Y/%m/%d'))
+        return self._storage_location
 
     def get_proxy(self):
         return self.proxy.get_dict() if self.proxy else None

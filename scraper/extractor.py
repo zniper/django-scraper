@@ -1,7 +1,6 @@
 import requests
 import os
 import re
-import json
 import logging
 import urlparse
 
@@ -9,17 +8,11 @@ from os.path import join
 from requests.exceptions import InvalidSchema, MissingSchema
 from lxml import etree
 
-from django.core.files.storage import default_storage as storage
-from django.conf import settings
-
-from .config import INDEX_JSON, DEFAULT_REPLACE_RULES
-from .utils import (
-    SimpleArchive, complete_url, get_uuid, get_link_info, print_time,
-    write_storage_file, get_content
-    )
+from .config import DEFAULT_REPLACE_RULES
+from .utils import complete_url, get_uuid, get_link_info, get_content
 
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('scraper')
 
 
 class Extractor(object):
@@ -30,18 +23,12 @@ class Extractor(object):
     _archive = None
     headers = {}
 
-    def __init__(self, url, base_dir='', proxies=None, user_agent=None):
+    def __init__(self, url, base_dir='.', proxies=None, user_agent=None):
         self._url = url
         self.proxies = proxies
-        if user_agent:
-            self.headers['User-Agent'] = user_agent
-        crawl_root = settings.SCRAPER_CRAWL_ROOT
-        if base_dir.strip().find(crawl_root) != 0:
-            self.base_dir = os.path.join(crawl_root, base_dir)
-        else:
-            self.base_dir = base_dir
+        self.headers['User-Agent'] = user_agent if user_agent else ''
+        self.base_dir = base_dir
         self.root = self.parse_content()
-        self.set_location()
 
     def xpath(self, value):
         """ Support calling xpath() from root element """
@@ -52,12 +39,11 @@ class Extractor(object):
         return elements
 
     def parse_content(self):
-        """Returns etree._Element object of target page"""
+        """ Returns etree._Element object of target page """
         content = ''
         try:
-            response = requests.get(self._url,
-                                    headers=self.headers,
-                                    proxies=self.proxies)
+            response = requests.get(
+                self._url, headers=self.headers, proxies=self.proxies)
             content = response.content
         except (InvalidSchema, MissingSchema):
             with open(self._url, 'r') as target:
@@ -65,15 +51,11 @@ class Extractor(object):
         self._html = content
         return etree.HTML(content)
 
-    def set_location(self, reset=False):
-        """Determine the path where downloaded files will be stored"""
-        if reset or not self._location:
-            self._uuid = get_uuid(self._url, self.base_dir)
-            self._location = os.path.join(self.base_dir, self._uuid)
-        return self._location
-
     @property
     def location(self):
+        if not self._location:
+            self._uuid = get_uuid(self._url, self.base_dir)
+            self._location = os.path.join(self.base_dir, self._uuid)
         return self._location
 
     def complete_url(self, path):
@@ -81,7 +63,7 @@ class Extractor(object):
 
     def extract_links(self, link_xpaths=['//a'], expand_xpaths=[], depth=1,
                       make_root=False):
-        """Extracts all links within current page, following given rules"""
+        """ Extracts all links within current page, following given rules """
         all_links = []
 
         # First, crawl all target links
@@ -110,34 +92,29 @@ class Extractor(object):
         return all_links
 
     def extract_content(self, selectors={}, get_image=True, replace_rules=[],
-                        black_words=[], data=None, archive=None):
-        """ Download the whole content and images and save to default storage.
-            Return:
-                (result_dir_path, {'content': <JSON_DATA>})
-        """
-        # Extract metadata
-        base_meta = {
-            'uuid': self._uuid,
-            'url': self._url,
-            'time': print_time(),
-            'content': {},
-            'images': [],
-            'media': [],
-            }
-        data = data or {}
-        data.update(base_meta)
+                        black_words=[]):
+        """ Extract the content from current extractor page following rules in
+        selectors.
 
-        # If file compress is present, all content will be putting there
-        # otherwise a new one will be created
-        if settings.SCRAPER_COMPRESS_RESULT:
-            self._archive = archive or SimpleArchive(
-                self._uuid+'.zip',
-                base_dir=settings.SCRAPER_TEMP_DIR
+        Arguments
+            selectors - Dictionary of selectors, ex: {'key': 'xpath'}
+            get_image - Download images if having HTML content
+            replace_rules - List of rules for removing useless text data
+            black_words - Process will stop if one of these words found
+
+        Returns - List of content dict and path to temp directory if existing
+            (
+                {
+                    'content': {},
+                    'media': [],
+                    'images': []
+                },
+                'PATH_TO_TEMP_DIR',
             )
-        elif self._archive:
-            self._archive = False
-
+        """
         content = {}
+        media = []
+        images = []
         for key in selectors:
             if isinstance(selectors[key], basestring):
                 xpath = selectors[key]
@@ -156,7 +133,7 @@ class Extractor(object):
                     description = ''
                     file_name = self.download_file(url)
                     if file_name:
-                        data['media'].append((file_name, description))
+                        media.append((file_name, description))
             else:
                 tmp_content = get_content(elements, data_type)
 
@@ -167,7 +144,7 @@ class Extractor(object):
                         logger.info('Bad word found (%s). Downloading stopped.'
                                     % word)
                         # A ROLLBACK CASE SHOULD BE IMPLEMENTED
-                        return None
+                        return (None, '')
 
                 # Perfrom replacing in the content
                 if replace_rules:
@@ -178,20 +155,16 @@ class Extractor(object):
                 # In case of getting image, put the HTML nodes into a list
                 if get_image and data_type == 'html':
                     for element in elements:
-                        data['images'].extend(self.extract_images(element))
+                        images.extend(self.extract_images(element))
 
-        # Save extracting result
-        data['content'].update(content)
-        json_data = json.dumps(data)
-        self.write_file(INDEX_JSON, json_data)
+        # Preparing output
+        result = [{
+            'content': content,
+            'images': images,
+            'media': media,
+        }, self.location]
 
-        # Only move to storage if archive was created by Collector
-        if archive is None and self._archive:
-            new_path = self._archive.move_to_storage(
-                storage, os.path.dirname(self._location))
-            self._location = new_path
-
-        return (self._location, json_data)
+        return result
 
     def extract_images(self, element, *args, **kwargs):
         """Find all images inside given element and return those URLs"""
@@ -207,12 +180,16 @@ class Extractor(object):
         return imeta
 
     def write_file(self, file_name, content):
-        """Write file to selected file storage with given path and content"""
-        # Get file writing function
-        if self._archive:
-            self._archive.write(join(self._uuid, file_name), content)
-        else:
-            write_storage_file(storage, self.get_path(file_name), content)
+        """ Write file to temporary directory """
+        file_path = os.path.join(self.location, file_name)
+        try:
+            if not os.path.exists(self.location):
+                os.makedirs(self.location)
+            with open(file_path, 'w') as mfile:
+                mfile.write(content)
+            return file_path
+        except OSError:
+            logger.exception('Cannot create file: {}'.format(file_path))
 
     def get_path(self, file_name):
         """ Return full path of file (include containing directory) """
@@ -227,17 +204,16 @@ class Extractor(object):
         lives = 3
         while lives:
             try:
-                lives -= 1
                 response = requests.get(file_url, headers=self.headers,
                                         proxies=self.proxies)
                 if response.status_code == 200:
                     self.write_file(file_name, response.content)
                     return file_name
                 else:
-                    logger.error('Error [%d] downloading %s' % (
-                        response.status_code, url))
+                    logger.error('Cannot downloading file %s' % url)
             except requests.ConnectionError:
-                logger.error('Retry downloading file %s' % file_url)
+                logger.info('Retry downloading file: %s' % file_url)
+            lives -= 1
         return None
 
     def refine_content(self, content, custom_rules=None):

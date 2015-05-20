@@ -1,4 +1,5 @@
 import re
+from django.conf import settings
 
 EXCLUDED_ATTRIBS = ('html')
 
@@ -23,3 +24,7 @@ PROTOCOLS = (
     ('http', 'HTTP'),
     ('https', 'HTTPS'),
 )
+
+COMPRESS_RESULT = getattr(settings, 'SCRAPER_COMPRESS_RESULT', False)
+TEMP_DIR = getattr(settings, 'SCRAPER_TEMP_DIR', '')
+CRAWL_ROOT = getattr(settings, 'SCRAPER_CRAWL_ROOT', '')

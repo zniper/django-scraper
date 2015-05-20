@@ -1,12 +1,14 @@
-import logging
 import uuid
+import os
 
 from datetime import datetime
-from os import path
+from os.path import join
 from jsonfield.fields import JSONField
+from shutil import rmtree
 
 from django.db import models
 from django.db.models.signals import pre_delete
+from django.utils.log import getLogger
 from django.conf import settings
 from django.utils.translation import ugettext_lazy as _
 from django.core.files.storage import default_storage as storage
@@ -14,12 +16,12 @@ from django.dispatch.dispatcher import receiver
 
 import base
 
-from .config import DATA_TYPES, PROTOCOLS
+from .config import DATA_TYPES, PROTOCOLS, COMPRESS_RESULT, TEMP_DIR
 from .signals import post_crawl, post_scrape
-from .utils import SimpleArchive, get_uuid
+from .utils import SimpleArchive, get_uuid, JSONResult, write_storage_file
 
 
-logger = logging.getLogger(__name__)
+logger = getLogger('scraper')
 
 
 class Collector(base.BaseCrawl):
@@ -43,21 +45,24 @@ class Collector(base.BaseCrawl):
         return u'Collector: {0}'.format(self.name)
 
     def get_page(self, url, task_id=None):
+        res = JSONResult(action='get_page', url=url, task_id=task_id)
         extractor = self.get_extractor(url)
-        page = extractor._html
-        result = create_result(page, task_id)
+        res.content = extractor._html
+        result = create_result(res.dict, task_id)
         post_scrape.send(self.__class__, result=result)
         return result
 
     def get_links(self, url, task_id=None):
+        res = JSONResult(action='get_links', url=url, task_id=task_id)
         extractor = self.get_extractor(url)
-        links = extractor.extract_links()
-        result = create_result(links, task_id)
+        res.content = extractor.extract_links()
+        result = create_result(res.dict, task_id)
         post_scrape.send(self.__class__, result=result)
         return result
 
     def get_content(self, url, force=False, task_id=None, archive=None):
-        """Download the content of a page specified by URL"""
+        """ Download the content of a page specified by URL """
+        res = JSONResult(action='get_content', url=url, task_id=task_id)
         # Skip the operation if the local content is present
         if not force:
             queryset = LocalContent.objects
@@ -68,27 +73,66 @@ class Collector(base.BaseCrawl):
         logger.info('Download %s' % url)
 
         # Determine local files location. It musts be unique by collector.
-        collector_id = 'co_{0}'.format(self.pk)
-        location = datetime.now().strftime('%Y/%m/%d')
-        location = path.join(location, collector_id)
-        extractor = self.get_extractor(url, location)
+        extractor = self.get_extractor(
+            url, join(TEMP_DIR, self.storage_location))
 
         # Extract content from target pages, so target_xpaths and
         # expand_xpaths are redundant
-        result_path, json_data = extractor.extract_content(
+        data, result_path = extractor.extract_content(
             get_image=self.get_image,
             selectors=self.selector_dict,
             replace_rules=self.replace_rules,
-            archive=archive)
+        )
+        res.update(**data)
+        local_path = self.finalize_result(res, result_path, archive)
 
-        content = LocalContent(url=url, collector=self, local_path=result_path)
+        # Create LocalContent object
+        content = LocalContent(url=url, collector=self, local_path=local_path)
         content.save()
         result = create_result(
-            data=json_data, local_content=content, task_id=task_id)
+            data=res.dict, local_content=content, task_id=task_id)
 
         post_scrape.send(self.__class__, result=result)
-
         return result
+
+    def finalize_result(self, res, result_path, archive):
+        """ Compress and move the result to location in default storage """
+        result_id = os.path.basename(result_path)
+
+        if not os.path.exists(result_path):
+            os.makedirs(result_path)
+
+        # Add the index.json file there. Actually, do we need that?
+        with open(join(result_path, 'index.json'), 'w') as index_file:
+            index_file.write(res.json)
+
+        # Compress result if needed, then move it to storage
+        local_path = ''
+        if archive is not None:
+            for item in os.listdir(result_path):
+                archive.write(
+                    join(result_id, item),
+                    open(join(result_path, item), 'r').read())
+        elif COMPRESS_RESULT:
+            archive = SimpleArchive(result_path + '.zip')
+            for item in os.listdir(result_path):
+                archive.write(
+                    item, open(join(result_path, item), 'r').read())
+            archive.finish()
+            local_path = archive.move_to_storage(
+                storage, self.storage_location)
+        else:
+            local_path = join(self.storage_location, result_id)
+            for item in os.listdir(result_path):
+                write_storage_file(
+                    storage, join(local_path, item),
+                    open(join(result_path, item), 'r').read())
+        try:
+            rmtree(result_path)
+        except OSError:
+            pass
+
+        return local_path
 
     @property
     def selector_dict(self):
@@ -100,11 +144,8 @@ class Collector(base.BaseCrawl):
 
 
 class Spider(base.BaseCrawl):
-    """This does work of collecting wanted pages' address, it will auto jump
-    to another page and continue finding. The operation is limited by:
-        crawl_depth: maximum depth of the operation
-        expand_links: list of XPaths to links where searches will be performed
-    """
+    """ This does work of collecting wanted pages' address, it will auto jump
+    to another page and continue finding."""
     name = models.CharField(max_length=256, blank=True, null=True)
     url = models.URLField(_('Start URL'), max_length=256, help_text='URL of \
         the starting page')
@@ -132,9 +173,10 @@ class Spider(base.BaseCrawl):
 
         if download and all_links:
             # Create a temp SimpleArchive for storing all crawled files
-            if settings.SCRAPER_COMPRESS_RESULT:
+            if COMPRESS_RESULT:
                 archive = SimpleArchive(
-                    get_uuid(self.url)+'.zip', settings.SCRAPER_TEMP_DIR)
+                    get_uuid(self.url)+'.zip',
+                    join(settings.SCRAPER_TEMP_DIR, self.storage_location))
             else:
                 archive = None
 
@@ -152,21 +194,20 @@ class Spider(base.BaseCrawl):
                         results.append(result)
 
             # Move the archive
-            if settings.SCRAPER_COMPRESS_RESULT and archive:
-
+            if archive:
                 logger.info('Move result ({}) to default storage'.format(
                     archive))
-
-                storage_location = path.join(
-                    settings.SCRAPER_CRAWL_ROOT,
-                    datetime.now().strftime('%Y/%m/%d'))
                 storage_path = archive.move_to_storage(
-                    storage, storage_location)
+                    storage, self.storage_location)
 
                 # Update local path of results
                 local_ids = [res.other.pk for res in results]
                 LocalContent.objects.filter(pk__in=local_ids).update(
                     local_path=storage_path)
+
+                # Refresh the results
+                result_ids = [res.pk for res in results]
+                results = Result.objects.filter(pk__in=result_ids)
 
             return results
         else:
@@ -190,8 +231,8 @@ class Selector(models.Model):
 
 
 class Result(models.Model):
-    """This model holds specific ouput information processed by Source.
-    It is implemented for better adapts when called by queuing system."""
+    """ This model holds specific ouput information processed by Source.
+    It is implemented for better adapts when called by queuing system. """
     task_id = models.CharField(max_length=64, blank=True, null=True)
     data = JSONField()
     other = models.ForeignKey('LocalContent', null=True, blank=True,
@@ -205,14 +246,22 @@ class Result(models.Model):
 
 
 def create_result(data, task_id=None, local_content=None):
-    """This will create and return the Result object"""
-    if not isinstance(data, dict):
-        data_dict = {'result': data}
+    """ This will create and return the Result object. It binds with a task ID
+    if provided.
+    Arguments:
+        data - Result data as dict or string value
+        task_id - (optional) ID of related task
+        local_content - (optional) related local content object
+    """
     # If no task_id (from queuing system) provided, new unique ID
     # with prefix will be generated and used
     if task_id is None:
-        task_id = settings.SCRAPER_NO_TASK_ID_PREFIX + str(uuid.uuid4())
-    res = Result(task_id=task_id, data=data_dict)
+        duplicated = True
+        while duplicated:
+            task_id = settings.SCRAPER_NO_TASK_ID_PREFIX + str(uuid.uuid4())
+            if not Result.objects.filter(task_id=task_id).exists():
+                break
+    res = Result(task_id=task_id, data=data)
     if local_content:
         res.other = local_content
     res.save()
@@ -239,7 +288,7 @@ class LocalContent(models.Model):
         try:
             dirs, files = storage.listdir(self.local_path)
             for fn in files:
-                storage.delete(path.join(self.local_path, fn))
+                storage.delete(join(self.local_path, fn))
         except OSError:
             logger.error('Error when deleting local files in {0}'.format(
                 self.local_path))

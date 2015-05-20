@@ -34,8 +34,8 @@ settings.configure(
         os.path.abspath(os.path.join(
             os.path.dirname(__file__), "scraper", "tests", "templates")),
     ],
-    SCRAPER_CRAWL_ROOT=os.path.join(current_dir, 'crawl'),
-    SCRAPER_TEMP_DIR=os.path.join(current_dir, '/tmp'),
+    SCRAPER_CRAWL_ROOT='crawl/',
+    SCRAPER_TEMP_DIR='tmp/',
     SCRAPER_NO_TASK_ID_PREFIX='00-',
     SCRAPER_COMPRESS_RESULT=False,
 )
