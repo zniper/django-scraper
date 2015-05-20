@@ -171,6 +171,12 @@ class SimpleArchive(object):
         if not file_path:
             file_path = get_uuid(base_dir=base_dir)
         self.file_path = join(base_dir, file_path)
+
+        # Create directories if not existing
+        location = os.path.dirname(self.file_path)
+        if not os.path.exists(location):
+            os.makedirs(location)
+
         if os.path.exists(self.file_path):
             os.remove(self.file_path)
         self._file = ZipFile(self.file_path, 'w')
