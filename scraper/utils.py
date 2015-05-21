@@ -8,6 +8,7 @@ from uuid import uuid4
 from zipfile import ZipFile
 from datetime import datetime
 from lxml import etree
+from shutil import rmtree
 
 from django.utils.functional import cached_property
 
@@ -87,7 +88,7 @@ def get_link_info(link, make_root=False):
         href = link.get('href') if not make_root else '/'+link.get('href')
         text = link.text.strip() if isinstance(link.text, basestring) else ''
         if href:
-            return {'url': href, 'text': text}
+            return {'url': href.strip(), 'text': text}
 
 
 def get_single_content(element, data_type):
@@ -98,9 +99,9 @@ def get_single_content(element, data_type):
         return element
     if data_type == 'text':
         # Return element.text or ''
-        return etree.tounicode(element, method='text')
+        return etree.tounicode(element, method='text').strip()
     elif data_type == 'html':
-        return etree.tounicode(element, pretty_print=True)
+        return etree.tounicode(element, pretty_print=True).strip()
 
 
 def get_content(elements, data_type='html'):
@@ -144,7 +145,13 @@ def get_uuid(url='', base_dir='', size=8):
 
 def write_storage_file(storage, file_path, content):
     """ Write a file with path and content into given storage. This
-    merely tries to support both FileSystem and S3 storage """
+    merely tries to support both FileSystem and S3 storage
+
+    Arguments:
+        storage - Django file storage
+        file_path - relative path to the file
+        content - content of file to be written
+    """
     try:
         mfile = storage.open(file_path, 'w')
         mfile.write(content)
@@ -152,12 +159,48 @@ def write_storage_file(storage, file_path, content):
     except IOError:
         # When directories are not auto being created, exception raised.
         # Then try to rewrite using the FileSystemStorage
-        location = os.path.dirname(file_path)
-        os.makedirs(join(storage.base_location, location))
+        location = join(storage.base_location, os.path.dirname(file_path))
+        if not os.path.exists(location):
+            os.makedirs(location)
         mfile = storage.open(file_path, 'w')
         mfile.write(content)
         mfile.close()
     return file_path
+
+
+def move_to_storage(storage, source, location):
+    """ Move single file or whole directory to storage
+    Arguments:
+        storage: Instance of the file storage (FileSystemStorage,...)
+        source: File or directory to be moved
+        location: Relative path where the file/dir will be placed into.
+    Returns:
+        Path of file in storage
+    """
+    source = source.strip().rstrip('/')
+    if os.path.isfile(source):
+        saved_path = write_storage_file(
+            storage, join(location, os.path.basename(source)),
+            open(source, 'r').read())
+    else:
+        blank_size = len(source.rsplit('/', 1)[0]) + 1
+        for items in os.walk(source):
+            location = items[0][blank_size:]
+            for item in items[2]:
+                write_storage_file(
+                    storage, join(location, item),
+                    open(join(items[0], item), 'r').read())
+        saved_path = join(location, os.path.basename(source))
+    # Nuke old file/dir
+    try:
+        if os.path.isfile(source):
+            os.remove(source)
+        else:
+            rmtree(source)
+    except OSError:
+        logger.exception('Error when deleting: {0}'.format(source))
+
+    return saved_path
 
 
 class SimpleArchive(object):

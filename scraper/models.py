@@ -16,9 +16,10 @@ from django.dispatch.dispatcher import receiver
 
 import base
 
-from .config import DATA_TYPES, PROTOCOLS, COMPRESS_RESULT, TEMP_DIR
+from .config import DATA_TYPES, PROTOCOLS, COMPRESS_RESULT, INDEX_JSON
 from .signals import post_crawl, post_scrape
-from .utils import SimpleArchive, get_uuid, JSONResult, write_storage_file
+from .utils import (
+    SimpleArchive, JSONResult, write_storage_file, move_to_storage)
 
 
 logger = getLogger('scraper')
@@ -60,21 +61,14 @@ class Collector(base.BaseCrawl):
         post_scrape.send(self.__class__, result=result)
         return result
 
-    def get_content(self, url, force=False, task_id=None, archive=None):
+    def get_content(self, url, force=False, task_id=None, crawl=False):
         """ Download the content of a page specified by URL """
-        res = JSONResult(action='get_content', url=url, task_id=task_id)
-        # Skip the operation if the local content is present
-        if not force:
-            queryset = LocalContent.objects
-            if queryset.filter(url=url, collector__pk=self.pk).exists():
-                logger.info('Content exists. Bypass %s' % url)
-                return
+        jres = JSONResult(action='get_content', url=url, task_id=task_id)
 
         logger.info('Download %s' % url)
 
         # Determine local files location. It musts be unique by collector.
-        extractor = self.get_extractor(
-            url, join(TEMP_DIR, self.storage_location))
+        extractor = self.get_extractor(url)
 
         # Extract content from target pages, so target_xpaths and
         # expand_xpaths are redundant
@@ -83,37 +77,41 @@ class Collector(base.BaseCrawl):
             selectors=self.selector_dict,
             replace_rules=self.replace_rules,
         )
-        res.update(**data)
-        local_path = self.finalize_result(res, result_path, archive)
+        jres.update(**data)
 
-        # Create LocalContent object
-        content = LocalContent(url=url, collector=self, local_path=local_path)
-        content.save()
-        result = create_result(
-            data=res.dict, local_content=content, task_id=task_id)
+        result = None
+        if not crawl:
+            # Create LocalContent and Result
+            final_path = self.finalize_result(jres, result_path)
+            content = LocalContent(url=url, local_path=final_path)
+            content.save()
+            result = create_result(
+                data=jres.dict, local_content=content, task_id=task_id)
+        else:
+            # Just return the data and path to temp location, craw_content()
+            # will take the rest.
+            result = jres.dict
+            final_path = result_path
 
         post_scrape.send(self.__class__, result=result)
-        return result
+        return (result, final_path)
 
-    def finalize_result(self, res, result_path, archive):
+    def finalize_result(self, res, result_path):
         """ Compress and move the result to location in default storage """
         result_id = os.path.basename(result_path)
 
+        # When extract_content doesn't produce any content, dir won't
+        # be created. Then, we need this.
         if not os.path.exists(result_path):
             os.makedirs(result_path)
 
         # Add the index.json file there. Actually, do we need that?
-        with open(join(result_path, 'index.json'), 'w') as index_file:
+        with open(join(result_path, INDEX_JSON), 'w') as index_file:
             index_file.write(res.json)
 
         # Compress result if needed, then move it to storage
         local_path = ''
-        if archive is not None:
-            for item in os.listdir(result_path):
-                archive.write(
-                    join(result_id, item),
-                    open(join(result_path, item), 'r').read())
-        elif COMPRESS_RESULT:
+        if COMPRESS_RESULT:
             archive = SimpleArchive(result_path + '.zip')
             for item in os.listdir(result_path):
                 archive.write(
@@ -159,59 +157,61 @@ class Spider(base.BaseCrawl):
     collectors = models.ManyToManyField(Collector, blank=True)
 
     def crawl_content(self, download=True, task_id=None):
+        """ Extract all found links then scrape those pages """
+        jres = JSONResult(
+            action='crawl_content', url=self.url, task_id=task_id)
         logger.info('\nStart crawling %s (%s)' % (self.name, self.url))
 
+        # Get all target links, prevent duplication
         extractor = self.get_extractor(self.url)
+        target_links = []
+        for link in extractor.extract_links(link_xpaths=self.target_links,
+                                            expand_xpaths=self.expand_links,
+                                            depth=self.crawl_depth):
+            if link['url'] not in target_links:
+                target_links.append(link['url'])
+        logger.info('%d link(s) found' % len(target_links))
 
-        all_links = extractor.extract_links(
-            link_xpaths=self.target_links,
-            expand_xpaths=self.expand_links,
-            depth=self.crawl_depth
-        )
-
-        logger.info('%d link(s) found' % len(all_links))
-
-        if download and all_links:
-            # Create a temp SimpleArchive for storing all crawled files
-            if COMPRESS_RESULT:
-                archive = SimpleArchive(
-                    get_uuid(self.url)+'.zip',
-                    join(settings.SCRAPER_TEMP_DIR, self.storage_location))
-            else:
-                archive = None
-
-            results = []
-            collectors = self.collectors.all()
+        combined_json = {}
+        result_paths = {}
+        if download and target_links:
             if task_id is None:
                 task_id = settings.SCRAPER_NO_TASK_ID_PREFIX + \
                     str(uuid.uuid4())
-            for link in all_links:
-                url = link['url']
-                for collector in collectors:
-                    result = collector.get_content(
-                        url, task_id=task_id, archive=archive)
-                    if result:
-                        results.append(result)
+            # Collect info from targeted links
+            for link in target_links:
+                for collector in self.collectors.all():
+                    result, result_path = collector.get_content(
+                        link, task_id=task_id, crawl=True)
+                    if jres:
+                        combined_json[result['id']] = result
+                        result_paths[result['id']] = result_path
 
-            # Move the archive
-            if archive:
-                logger.info('Move result ({0}) to default storage'.format(
-                    archive))
+            # Create the aggregated Result
+            jres.update(content=combined_json)
+            crawl_result = Result(task_id=task_id, data=jres.json)
+            crawl_result.save()
+
+            # Finalize and move to storage
+            if COMPRESS_RESULT:
+                archive = SimpleArchive(
+                    extractor._uuid + '.zip',
+                    join(settings.SCRAPER_TEMP_DIR, self.storage_location))
+                archive.write(INDEX_JSON, jres.json)
                 storage_path = archive.move_to_storage(
                     storage, self.storage_location)
+            else:
+                storage_path = join(self.storage_location, extractor._uuid)
+                for res_path in result_paths:
+                    move_to_storage(storage, res_path, storage_path)
 
-                # Update local path of results
-                local_ids = [res.other.pk for res in results]
-                LocalContent.objects.filter(pk__in=local_ids).update(
-                    local_path=storage_path)
-
-                # Refresh the results
-                result_ids = [res.pk for res in results]
-                results = Result.objects.filter(pk__in=result_ids)
-
-            return results
+            content = LocalContent(url=self.url, local_path=storage_path)
+            content.save()
+            crawl_result.other = content
+            crawl_result.save()
+            return result
         else:
-            return all_links
+            return target_links
 
         # Notify some receivers
         post_crawl.send(self.__class__, task_id=task_id)
@@ -273,14 +273,13 @@ class LocalContent(models.Model):
         redownloading
     """
     url = models.CharField(max_length=256)
-    collector = models.ForeignKey('Collector')
     local_path = models.CharField(max_length=256)
     created_time = models.DateTimeField(
         default=datetime.now, blank=True, null=True)
     state = models.IntegerField(default=0)
 
     def __unicode__(self):
-        return u'Local Content: %s' % self.url
+        return u'Content (at {0}) of: {1}'.format(self.created_time, self.url)
 
     def remove_files(self):
         """Remove all files in storage of this LocalContent instance"""

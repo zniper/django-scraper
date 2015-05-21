@@ -29,6 +29,7 @@ class Extractor(object):
         self.headers['User-Agent'] = user_agent if user_agent else ''
         self.base_dir = base_dir
         self.root = self.parse_content()
+        self._location = self.location
 
     def xpath(self, value):
         """ Support calling xpath() from root element """
@@ -165,6 +166,7 @@ class Extractor(object):
             'content': content,
             'images': images,
             'media': media,
+            'uuid': self._uuid,
         }, self.location]
 
         return result

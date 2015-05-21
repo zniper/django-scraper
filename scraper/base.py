@@ -7,7 +7,7 @@ from django.db import models
 from django.utils.log import getLogger
 
 from .extractor import Extractor
-from .config import CRAWL_ROOT
+from .config import CRAWL_ROOT, TEMP_DIR
 
 logger = getLogger('scraper')
 
@@ -20,14 +20,14 @@ class BaseCrawl(models.Model):
         'UserAgent', blank=True, null=True, on_delete=models.PROTECT)
     _storage_location = None
 
-    def get_extractor(self, url, base_dir=''):
+    def get_extractor(self, url):
         """Return Extractor instance with given URL. If URL invalid, None will be
         returned"""
         splitted_url = urlparse.urlsplit(url)
         if splitted_url.scheme and splitted_url.netloc:
             extractor = Extractor(
                 url,
-                base_dir=base_dir,
+                base_dir=os.path.join(TEMP_DIR, self.storage_location),
                 proxies=self.get_proxy(),
                 user_agent=self.get_ua()
             )
