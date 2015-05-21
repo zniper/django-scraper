@@ -32,11 +32,14 @@ class Extractor(object):
 
     def xpath(self, value):
         """ Support calling xpath() from root element """
-        elements = self.root.xpath(value)
-        # Deal with the case of injected <tbody> by browser
-        if len(elements) == 0 and '/tbody/' in value:
-            elements = self.root.xpath(value.replace('tbody/', ''))
-        return elements
+        try:
+            elements = self.root.xpath(value)
+            # Deal with the case of injected <tbody> by browser
+            if len(elements) == 0 and '/tbody/' in value:
+                elements = self.root.xpath(value.replace('tbody/', ''))
+            return elements
+        except etree.XPathEvalError:
+            logger.exception('Cannot evaluate XPath value: {0}'.format(value))
 
     def parse_content(self):
         """ Returns etree._Element object of target page """
