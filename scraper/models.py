@@ -167,7 +167,7 @@ class Spider(base.BaseCrawl):
         """ Extract all found links then scrape those pages
         Arguments:
             download - Determine to download files or dry run
-            task_id - ID of the (Celery) task. It will auto genenrate if missing
+            task_id - ID of the (Celery) task, will be genenrated if missing
         Returns:
             (result, path) - Result and path to collected content (dir or ZIP)
         """
