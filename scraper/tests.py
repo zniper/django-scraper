@@ -5,6 +5,7 @@ from django.core.files.storage import default_storage as storage
 import os
 import simplejson as json
 
+from zipfile import ZipFile
 from os.path import join
 from shutil import rmtree
 from zipfile import ZipFile
@@ -369,6 +370,8 @@ class SpiderTests(TestCase):
         result_json = result.data
         self.assertEqual(len(result_json['content']), 3)
         self.assertGreater(result.other.pk, 0)
+        zfile = ZipFile(join(storage.base_location, path))
+        self.assertEquals(len(zfile.namelist()), 6)
         storage.delete(path)
 
 

@@ -213,6 +213,13 @@ class Spider(base.BaseCrawl):
                     extractor._uuid + '.zip',
                     join(settings.SCRAPER_TEMP_DIR, self.storage_location))
                 archive.write(INDEX_JSON, crawl_json)
+                # Write result files
+                for res_id in result_paths:
+                    res_path = result_paths[res_id]
+                    for item in os.listdir(res_path):
+                        archive.write(
+                            join(res_id, item),
+                            open(join(res_path, item), 'r').read())
                 storage_path = archive.move_to_storage(
                     storage, self.storage_location)
             else:
