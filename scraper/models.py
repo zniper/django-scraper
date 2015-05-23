@@ -61,8 +61,18 @@ class Collector(base.BaseCrawl):
         post_scrape.send(self.__class__, result=result)
         return result
 
-    def get_content(self, url, force=False, task_id=None, crawl=False):
-        """ Download the content of a page specified by URL """
+    def get_content(self, url, task_id=None, crawl=False):
+        """ Download the content of a page specified by URL.
+        Arguments:
+            url - Address of the page to be processed
+            task_id - ID of the (Celery) task
+            crawl - Work independently or called by crawl_content(). This
+                    will make output result different
+        Returns:
+            (result, path) - Result and path to collected content
+                If crawl=False: result is content dictionary
+                If crawl=True: result is a Result object
+        """
         jres = JSONResult(action='get_content', url=url, task_id=task_id)
 
         logger.info('Download %s' % url)
@@ -79,7 +89,13 @@ class Collector(base.BaseCrawl):
         )
         jres.update(**data)
 
-        result = None
+        # Write index.json file
+        if not os.path.exists(result_path):
+            os.makedirs(result_path)
+        with open(join(result_path, INDEX_JSON), 'w') as index_file:
+            index_file.write(jres.json)
+
+        # Finalize data
         if not crawl:
             # Create LocalContent and Result
             final_path = self.finalize_result(jres, result_path)
@@ -90,24 +106,15 @@ class Collector(base.BaseCrawl):
         else:
             # Just return the data and path to temp location, craw_content()
             # will take the rest.
-            result = jres.dict
             final_path = result_path
 
-        post_scrape.send(self.__class__, result=result)
+        result = jres.dict
+        post_scrape.send(self.__class__, result=result.get('id'))
         return (result, final_path)
 
     def finalize_result(self, res, result_path):
         """ Compress and move the result to location in default storage """
         result_id = os.path.basename(result_path)
-
-        # When extract_content doesn't produce any content, dir won't
-        # be created. Then, we need this.
-        if not os.path.exists(result_path):
-            os.makedirs(result_path)
-
-        # Add the index.json file there. Actually, do we need that?
-        with open(join(result_path, INDEX_JSON), 'w') as index_file:
-            index_file.write(res.json)
 
         # Compress result if needed, then move it to storage
         local_path = ''
@@ -157,7 +164,13 @@ class Spider(base.BaseCrawl):
     collectors = models.ManyToManyField(Collector, blank=True)
 
     def crawl_content(self, download=True, task_id=None):
-        """ Extract all found links then scrape those pages """
+        """ Extract all found links then scrape those pages
+        Arguments:
+            download - Determine to download files or dry run
+            task_id - ID of the (Celery) task. It will auto genenrate if missing
+        Returns:
+            (result, path) - Result and path to collected content (dir or ZIP)
+        """
         jres = JSONResult(
             action='crawl_content', url=self.url, task_id=task_id)
         logger.info('\nStart crawling %s (%s)' % (self.name, self.url))
@@ -181,40 +194,42 @@ class Spider(base.BaseCrawl):
             # Collect info from targeted links
             for link in target_links:
                 for collector in self.collectors.all():
-                    result, result_path = collector.get_content(
+                    res, res_path = collector.get_content(
                         link, task_id=task_id, crawl=True)
                     if jres:
-                        combined_json[result['id']] = result
-                        result_paths[result['id']] = result_path
+                        combined_json[res['id']] = res
+                        result_paths[res['id']] = res_path
 
             # Create the aggregated Result
             jres.update(content=combined_json)
-            crawl_result = Result(task_id=task_id, data=jres.json)
+            crawl_json = jres.json
+            crawl_result = Result(task_id=task_id, data=crawl_json)
             crawl_result.save()
 
             # Finalize and move to storage
+            logger.info('Finalize crawl results of task {0}'.format(task_id))
             if COMPRESS_RESULT:
                 archive = SimpleArchive(
                     extractor._uuid + '.zip',
                     join(settings.SCRAPER_TEMP_DIR, self.storage_location))
-                archive.write(INDEX_JSON, jres.json)
+                archive.write(INDEX_JSON, crawl_json)
                 storage_path = archive.move_to_storage(
                     storage, self.storage_location)
             else:
                 storage_path = join(self.storage_location, extractor._uuid)
-                for res_path in result_paths:
-                    move_to_storage(storage, res_path, storage_path)
-
+                write_storage_file(
+                    storage, join(storage_path, 'index.json'), crawl_json)
+                for res_id in result_paths:
+                    move_to_storage(
+                        storage, result_paths[res_id], storage_path)
+            # Add LocalContent
             content = LocalContent(url=self.url, local_path=storage_path)
             content.save()
             crawl_result.other = content
             crawl_result.save()
-            return result
-        else:
-            return target_links
+            return (crawl_result, storage_path)
 
-        # Notify some receivers
-        post_crawl.send(self.__class__, task_id=task_id)
+            post_crawl.send(self.__class__, task_id=task_id)
 
     def __unicode__(self):
         return 'Spider: {0}'.format(self.name)

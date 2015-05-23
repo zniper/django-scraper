@@ -162,14 +162,12 @@ class Extractor(object):
                         images.extend(self.extract_images(element))
 
         # Preparing output
-        result = [{
+        return ({
             'content': content,
             'images': images,
             'media': media,
             'uuid': self._uuid,
-        }, self.location]
-
-        return result
+        }, self.location)
 
     def extract_images(self, element, *args, **kwargs):
         """Find all images inside given element and return those URLs"""

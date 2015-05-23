@@ -169,7 +169,8 @@ def write_storage_file(storage, file_path, content):
 
 
 def move_to_storage(storage, source, location):
-    """ Move single file or whole directory to storage
+    """ Move single file or whole directory to storage. Empty directory
+    will not be moved.
     Arguments:
         storage: Instance of the file storage (FileSystemStorage,...)
         source: File or directory to be moved
@@ -185,12 +186,13 @@ def move_to_storage(storage, source, location):
     else:
         blank_size = len(source.rsplit('/', 1)[0]) + 1
         for items in os.walk(source):
-            location = items[0][blank_size:]
+            loc = join(location, items[0][blank_size:])
             for item in items[2]:
                 write_storage_file(
-                    storage, join(location, item),
+                    storage, join(loc, item),
                     open(join(items[0], item), 'r').read())
         saved_path = join(location, os.path.basename(source))
+
     # Nuke old file/dir
     try:
         if os.path.isfile(source):

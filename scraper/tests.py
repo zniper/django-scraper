@@ -4,6 +4,8 @@ from django.core.files.storage import default_storage as storage
 
 import os
 import simplejson as json
+
+from os.path import join
 from shutil import rmtree
 from zipfile import ZipFile
 
@@ -208,7 +210,7 @@ class ExtractorOnlineTests(TestCase):
         # Verify the meta file
         self.assertEquals(
             data['content']['title'],
-            ["Shift Messenger (YC W15) Makes It Easy For Workers To Swap Hours\n"]
+            ["Shift Messenger (YC W15) Makes It Easy For Workers To Swap Hours"]
         )
 
     def test_extract_content_media(self):
@@ -236,7 +238,7 @@ class ExtractorOnlineTests(TestCase):
                          'CloudMedx (YC W15) Helps Doctors Spot Patients Who Will Need Expensive Treatment')
 
 
-class ModelCollectorTests(TestCase):
+class CollectorTests(TestCase):
 
     def setUp(self):
         self.compress_option = models.COMPRESS_RESULT
@@ -272,9 +274,9 @@ class ModelCollectorTests(TestCase):
         )
         selector.save()
         collector.selectors.add(selector)
-        res = collector.get_content(get_url('yc.0.html'))
-        self.assertNotEqual(res.data['content']['body'], None)
-        self.assertEqual(storage.exists(res.other.local_path), True)
+        res, path = collector.get_content(get_url('yc.0.html'))
+        self.assertNotEqual(res['content']['body'], None)
+        self.assertEqual(storage.exists(path), True)
 
     def test_get_content_zip(self):
         models.COMPRESS_RESULT = True
@@ -288,12 +290,12 @@ class ModelCollectorTests(TestCase):
         )
         selector.save()
         collector.selectors.add(selector)
-        res = collector.get_content(get_url('yc.0.html'))
-        self.assertNotEqual(res.data['content']['body'], None)
-        self.assertEqual(storage.exists(res.other.local_path), True)
+        res, path = collector.get_content(get_url('yc.0.html'))
+        self.assertNotEqual(res['content']['body'], None)
+        self.assertEqual(storage.exists(path), True)
 
 
-class ModelSpiderTestCase(TestCase):
+class SpiderTests(TestCase):
 
     def setUp(self):
         self.compress_option = models.COMPRESS_RESULT
@@ -328,17 +330,17 @@ class ModelSpiderTestCase(TestCase):
         spider.save()
         spider.collectors.add(collector)
         self.assertGreater(spider.pk, 0)
-        results = spider.crawl_content()
-        self.assertEqual(len(results), 3)
+        result, path = spider.crawl_content()
+        self.assertEqual(storage.exists(path), True)
+        result_json = result.data
+        self.assertEqual(len(result_json['content']), 3)
+        self.assertGreater(result.other.pk, 0)
 
-        for result in results:
-            result_path = result.other.local_path
-            self.assertEqual(exists(result_path), True)
-            if hasattr(storage, 'base_location'):
-                rmtree(self.get_path(result_path))
-            else:
-                if storage.exists(result_path):
-                    storage.delete(result_path)
+        if hasattr(storage, 'base_location'):
+            rmtree(self.get_path(path))
+        else:
+            if storage.exists(path):
+                storage.delete(path)
 
     def test_crawl_zip(self):
         models.COMPRESS_RESULT = True
@@ -361,20 +363,16 @@ class ModelSpiderTestCase(TestCase):
         spider.save()
         spider.collectors.add(collector)
         self.assertGreater(spider.pk, 0)
-        results = spider.crawl_content()
-        self.assertEqual(len(results), 3)
-        common_path = results[0].other.local_path
-        self.assertEqual(storage.exists(common_path), True)
-        for result in results:
-            self.assertEqual(result.other.local_path, common_path)
-        if hasattr(storage, 'base_location'):
-            storage.delete(common_path)
-        else:
-            if storage.exists(common_path):
-                storage.delete(common_path)
+        result, path = spider.crawl_content()
+        self.assertIn('.zip', path)
+        self.assertEqual(storage.exists(path), True)
+        result_json = result.data
+        self.assertEqual(len(result_json['content']), 3)
+        self.assertGreater(result.other.pk, 0)
+        storage.delete(path)
 
 
-class SimpleArchiveTestCase(TestCase):
+class SimpleArchiveTests(TestCase):
 
     base_dir = 'test-simplearchive-tmp'
     storage_dir = 'test-simplearchive-storage'
@@ -433,3 +431,41 @@ class SimpleArchiveTestCase(TestCase):
         self.assertEqual(expected_file, new_path)
         self.assertEqual(storage.exists(expected_file), True)
         self.assertEqual(os.path.exists(zip_path), False)
+
+
+class MiscTests(TestCase):
+
+    def tearDown(self):
+        try:
+            storage.delete('tests')
+        except:
+            rmtree(join(storage.base_location, 'tests'))
+
+    def test_move_to_storage_file(self):
+        file_path = join(config.TEMP_DIR, 'test_move.txt')
+        with open(file_path, 'w') as wfile:
+            wfile.write('dummy')
+        new_path = utils.move_to_storage(storage, file_path, 'tests')
+        self.assertEqual(new_path, join('tests', 'test_move.txt'))
+        self.assertNotEqual(os.path.exists(file_path), True)
+        self.assertEqual(storage.exists(new_path), True)
+
+    def test_move_to_storage_dir(self):
+        location = join(config.TEMP_DIR, 'test_misc')
+        os.makedirs(location+'/empty_dir')
+        os.makedirs(location+'/normal_dir')
+        file_one = join(location, '01.txt')
+        with open(file_one, 'w') as wfile:
+            wfile.write('dummy')
+        file_two = join(location, 'normal_dir/02.txt')
+        with open(file_two, 'w') as wfile:
+            wfile.write('dummy')
+        new_path = utils.move_to_storage(storage, location, 'tests')
+        self.assertEqual(new_path, join('tests', 'test_misc'))
+        self.assertNotEqual(os.path.exists(location), True)
+        self.assertEqual(storage.exists(new_path), True)
+        self.assertEqual(storage.exists(join(new_path, 'empty_dir')), False)
+        self.assertEqual(storage.exists(join(new_path, 'normal_dir')), True)
+        self.assertEqual(
+            storage.exists(join(new_path, 'normal_dir/02.txt')), True)
+        self.assertEqual(storage.exists(join(new_path, '01.txt')), True)
