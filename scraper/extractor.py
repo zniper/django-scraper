@@ -65,35 +65,26 @@ class Extractor(object):
     def complete_url(self, path):
         return complete_url(self._url, path)
 
-    def extract_links(self, link_xpaths=['//a'], expand_xpaths=[], depth=1,
-                      make_root=False):
-        """ Extracts all links within current page, following given rules """
-        all_links = []
-
-        # First, crawl all target links
-        elements = []
-        for xpath in link_xpaths:
-            elements.extend(self.xpath(xpath))
-
-        for el in elements:
-            link = get_link_info(el, make_root)
-            if link:
-                link = self.complete_url(link)
-                all_links.append(link)
-
-        # Then, check if going to next page
-        if depth > 1:
-            for rule in expand_xpaths:
-                for path in self.xpath(rule):
-                    link = get_link_info(path)
-                    if link:
-                        url = self.complete_url(link['url'])
-                        sub_extractor = Extractor(url)
-                        sub_links = sub_extractor.extract_links(
-                            link_xpaths, expand_xpaths, depth-1, make_root)
-                        all_links.extend(sub_links)
-
-        return all_links
+    def extract_links(self, xpaths=['//a'], unique=True, make_root=False):
+        """ Collect all links in current page following given XPath values
+        Arguments:
+            xpaths - List of XPath values of links
+            unique - Accept URL duplication in result or nor
+            make_root - Add / at beginning of URL
+        """
+        urls = []
+        links = []
+        for xpath in xpaths:
+            for element in self.xpath(xpath):
+                link = get_link_info(element, make_root)
+                if not link:
+                    continue
+                if unique:
+                    if link['url'] in urls:
+                        continue
+                    urls.append(link['url'])
+                links.append(self.complete_url(link))
+        return links
 
     def extract_content(self, selectors={}, get_image=True, replace_rules=[],
                         black_words=[]):

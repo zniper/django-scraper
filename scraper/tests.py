@@ -101,8 +101,8 @@ class ExtractorLocalTests(TestCase):
         url = self.extractor.complete_url('https://google.com')
         self.assertEqual(url, 'https://google.com')
 
-    def test_extract_links_no_expand(self):
-        links = self.extractor.extract_links()
+    def test_extract_links_duplicate(self):
+        links = self.extractor.extract_links(unique=False)
         self.assertEqual(len(links), 81)
         self.assertEqual(links[0]['url'],
                          'https://posthaven.com/')
@@ -110,6 +110,12 @@ class ExtractorLocalTests(TestCase):
                          'http://www.fastcompany.com/3042861/the-y-combinator-chronicles/the-secret-million-that-y-combinator-invests-in-all-its-startups')
         self.assertEqual(links[19]['text'],
                          u'Transcriptic\xc2\xa0(YC W15) and the array of free services for new YC startups')
+
+    def test_extract_links_unique(self):
+        links = self.extractor.extract_links(unique=True)
+        self.assertEqual(len(links), 74)
+        self.assertEqual(links[0]['url'],
+                         'https://posthaven.com/')
 
     def test_get_path(self):
         file_path = self.extractor.get_path(__file__)
@@ -222,21 +228,11 @@ class ExtractorOnlineTests(TestCase):
         self.assertEqual(path, self.extractor.location)
         self.assertEqual(len(os.listdir(path)), 1)
 
-    def test_extract_links_expand(self):
-        links = self.extractor.extract_links(
-            ["//h2/a"],
-            expand_xpaths=["//a[@rel='next']"],
-            depth=2
-        )
-        self.assertEqual(len(links), 23)
-        self.assertEqual(links[0]['url'],
-                         'https://raw.githubusercontent.com/zniper/django-scraper/master/scraper/test_data/yc.a0.html')
-        self.assertEqual(links[0]['text'],
-                         'Shift Messenger (YC W15) Makes It Easy For Workers To Swap Hours')
-        self.assertEqual(links[22]['url'],
-                         'http://blog.ycombinator.com/cloudmedx-yc-w15-helps-doctors-spot-patients-who-will-need-expensive-treatment')
-        self.assertEqual(links[22]['text'],
-                         'CloudMedx (YC W15) Helps Doctors Spot Patients Who Will Need Expensive Treatment')
+
+class SpiderMock(object):
+    def __init__(self, target=['//a'], expand=[]):
+        self.target_links = target
+        self.expand_links = expand
 
 
 class CollectorTests(TestCase):
@@ -275,9 +271,9 @@ class CollectorTests(TestCase):
         )
         selector.save()
         collector.selectors.add(selector)
-        res, path = collector.get_content(get_url('yc.0.html'))
+        res = collector.get_content(get_url('yc.0.html'))
         self.assertNotEqual(res['content']['body'], None)
-        self.assertEqual(storage.exists(path), True)
+        self.assertEqual(storage.exists(res['extras']['path']), True)
 
     def test_get_content_zip(self):
         models.COMPRESS_RESULT = True
@@ -291,9 +287,30 @@ class CollectorTests(TestCase):
         )
         selector.save()
         collector.selectors.add(selector)
-        res, path = collector.get_content(get_url('yc.0.html'))
+        res = collector.get_content(get_url('yc.0.html'))
         self.assertNotEqual(res['content']['body'], None)
-        self.assertEqual(storage.exists(path), True)
+        self.assertEqual(storage.exists(res['extras']['path']), True)
+
+    def test_get_content_with_spider(self):
+        models.COMPRESS_RESULT = False
+        collector = models.Collector(name='news-content')
+        collector.save()
+        selector = models.Selector(
+            key='body',
+            xpath="//div[@class='post-body']",
+            data_type='html'
+        )
+        selector.save()
+        collector.selectors.add(selector)
+        spider = SpiderMock(
+            ['//div[@class="post-title"]//a'],
+            ['//header/a']
+        )
+        res = collector.get_content(get_url('yc.0.html'), spider=spider)
+        self.assertNotEqual(res['content']['body'], None)
+        self.assertEqual(len(res['extras']['target']), 3)
+        self.assertEqual(len(res['extras']['expand']), 1)
+        self.assertEqual(os.path.exists(res['extras']['path']), True)
 
 
 class SpiderTests(TestCase):
@@ -373,6 +390,40 @@ class SpiderTests(TestCase):
         zfile = ZipFile(join(storage.base_location, path))
         self.assertEquals(len(zfile.namelist()), 6)
         storage.delete(path)
+
+    def test_crawl_expand(self):
+        models.COMPRESS_RESULT = False
+        # Create collector, selectors then spider
+        selector = models.Selector(
+            key='content',
+            xpath="//div[@class='post-body']",
+            data_type='html'
+        )
+        selector.save()
+        collector = models.Collector(name='news-content')
+        collector.save()
+        collector.selectors.add(selector)
+        spider = models.Spider(
+            url=DATA_URL+'yc.0.html',
+            name='Test Source',
+            target_links=["//div[@class='post-title']/h2/a"],
+            expand_links=['//a[@rel="next"]'],
+            crawl_depth=2
+        )
+        spider.save()
+        spider.collectors.add(collector)
+        self.assertGreater(spider.pk, 0)
+        result, path = spider.crawl_content()
+        self.assertEqual(storage.exists(path), True)
+        result_json = result.data
+        self.assertEqual(len(result_json['content']), 5)
+        self.assertGreater(result.other.pk, 0)
+
+        if hasattr(storage, 'base_location'):
+            rmtree(self.get_path(path))
+        else:
+            if storage.exists(path):
+                storage.delete(path)
 
 
 class SimpleArchiveTests(TestCase):
