@@ -275,7 +275,8 @@ class Spider(base.BaseCrawl):
             except OSError:
                 pass
 
-        logger.info('[{0}] Result location: {1}'.format(self.task_id, storage_path))
+        logger.info('[{0}] Result location: {1}'.format(
+            self.task_id, storage_path))
         return storage_path
 
     def process_target(self, url):
