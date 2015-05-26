@@ -41,6 +41,7 @@ class Extractor(object):
             return elements
         except etree.XPathEvalError:
             logger.exception('Cannot evaluate XPath value: {0}'.format(value))
+        return []
 
     def parse_content(self):
         """ Returns etree._Element object of target page """

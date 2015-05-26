@@ -73,7 +73,7 @@ class Collector(base.BaseCrawl):
                 If crawl=True: result is a Result object
         """
         jres = JSONResult(action='get_content', url=url, task_id=task_id)
-        logger.info('Downloading %s' % url)
+        logger.info('Scraping: %s' % url)
 
         # Determine local files location. It musts be unique by collector.
         extractor = self.get_extractor(url)
@@ -121,6 +121,7 @@ class Collector(base.BaseCrawl):
     def finalize_result(self, result_path):
         """ Compress and move the result to location in default storage """
         result_id = os.path.basename(result_path)
+        logger.info('Finalizing result [{0}]'.format(result_id))
 
         # Compress result if needed, then move it to storage
         local_path = ''
@@ -143,6 +144,7 @@ class Collector(base.BaseCrawl):
         except OSError:
             pass
 
+        logger.info('Result location: {0}'.format(result_path))
         return local_path
 
     @property
@@ -184,19 +186,23 @@ class Spider(base.BaseCrawl):
         """
         self.task_id = task_id or \
             settings.SCRAPER_NO_TASK_ID_PREFIX + str(uuid.uuid4())
-        logger.info('\nStart crawling %s (%s)' % (self.name, self.url))
+
+        logger.info('[{0}] START CRAWLING: {1}'.format(
+            self.task_id, self.url))
 
         # Collect all target links from level 0
         self.depths = {'target': {}, 'expand': {}}
-        self.crawl_links = {'expand': []}
-        self.crawl_links['target'] = [self.url] if self.crawl_root else []
+        self.crawl_links = {'target': [], 'expand': []}
+        if self.crawl_root:
+            self.crawl_links['target'].append(self.url)
+            self.depths['target'][self.url] = 0
         extractor = self.get_extractor(self.url)
         self.aggregate_links(self.get_links(extractor), 1)
         logger.info('Found links: {0} targets, {1} expansions'.format(
             len(self.crawl_links['target']), len(self.crawl_links['expand'])))
 
         jres = JSONResult('crawl_content', uuid=extractor._uuid,
-                          url=self.url, task_id=task_id)
+                          url=self.url, task_id=self.task_id)
         combined_json = {}
         result_paths = {}
         while self.crawl_links['target'] or self.crawl_links['expand']:
@@ -222,19 +228,19 @@ class Spider(base.BaseCrawl):
         # Create the aggregated Result
         jres.update(content=combined_json)
         crawl_json = jres.json
-        crawl_result = create_result(crawl_json, task_id)
+        crawl_result = create_result(crawl_json, self.task_id)
 
         # Finalize and move to storage
         storage_path = self.finalize_result(
             crawl_result, crawl_json, result_paths)
-        post_crawl.send(self.__class__, task_id=task_id)
+        post_crawl.send(self.__class__, task_id=self.task_id)
         return (crawl_result, storage_path)
 
     def finalize_result(self, crawl_result, crawl_json, result_paths):
         """ Finalize and move collected data to storage """
-
-        logger.info('Finalize result of task {0}'.format(self.task_id))
         crawl_id = crawl_result.data['id']
+        logger.info('[{0}] Finalizing result [{1}]'.format(
+            self.task_id, crawl_id))
         if COMPRESS_RESULT:
             archive = SimpleArchive(
                 crawl_id + '.zip',
@@ -269,6 +275,7 @@ class Spider(base.BaseCrawl):
             except OSError:
                 pass
 
+        logger.info('[{0}] Result location: {1}'.format(self.task_id, storage_path))
         return storage_path
 
     def process_target(self, url):
