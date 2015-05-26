@@ -160,6 +160,8 @@ class Spider(base.BaseCrawl):
     name = models.CharField(max_length=256, blank=True, null=True)
     url = models.URLField(_('Start URL'), max_length=256, help_text='URL of \
         the starting page')
+    crawl_root = models.BooleanField(
+        _('Extract data from starting page'), default=False)
     # Link to different pages, all are XPath
     target_links = JSONField(help_text='XPaths toward links to pages with content \
         to be extracted')
@@ -186,7 +188,8 @@ class Spider(base.BaseCrawl):
 
         # Collect all target links from level 0
         self.depths = {'target': {}, 'expand': {}}
-        self.crawl_links = {'target': [], 'expand': []}
+        self.crawl_links = {'expand': []}
+        self.crawl_links['target'] = [self.url] if self.crawl_root else []
         extractor = self.get_extractor(self.url)
         self.aggregate_links(self.get_links(extractor), 1)
         logger.info('Found links: {0} targets, {1} expansions'.format(
@@ -222,7 +225,6 @@ class Spider(base.BaseCrawl):
         crawl_result = create_result(crawl_json, task_id)
 
         # Finalize and move to storage
-        logger.info('Finalize crawl results of task {0}'.format(task_id))
         storage_path = self.finalize_result(
             crawl_result, crawl_json, result_paths)
         post_crawl.send(self.__class__, task_id=task_id)
@@ -270,7 +272,21 @@ class Spider(base.BaseCrawl):
         return storage_path
 
     def process_target(self, url):
-        """ Perform collecting in specific target url """
+        """ Perform collecting data in specific target url
+        Args:
+            url - Address of the page to be collected
+        Returns:
+            JSON of collected data
+                {
+                    'content':
+                    'extras': {
+                        'path':
+                        'target':
+                        'expand':
+                    },
+                    ...
+                }
+        """
         depth = self.depths['target'][url]
         collector = self.collectors.first()
         res = collector.get_content(url, task_id=self.task_id, spider=self)
@@ -284,7 +300,8 @@ class Spider(base.BaseCrawl):
         return res
 
     def aggregate_links(self, links, depth):
-        """ Aggregate given links into self.craw_links """
+        """ Aggregate given links (with target & expand) into
+        self.craw_links """
         for key in links:
             if key == 'expand' and depth == self.crawl_depth:
                 continue
