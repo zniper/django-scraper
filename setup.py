@@ -11,8 +11,8 @@ version = scraper.__version__
 setup(
     name='django-scraper',
     version=version,
-    description='Django application which crawls and downloads online content'
-                ' following instructions',
+    description='Django application for collecting online content following '
+                'user-defined instructions',
     long_description=open('README.rst').read(),
     license='The MIT License (MIT)',
     url='https://github.com/zniper/django-scraper',
@@ -27,5 +27,4 @@ setup(
         'simplejson==3.6.5',
         'django-jsonfield==0.9.13'
         ],
-
 )

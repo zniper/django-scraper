@@ -3,20 +3,23 @@
 [![Downloads](https://pypip.in/download/django-scraper/badge.svg)](https://pypi.python.org/pypi/django-scraper/)
 [![Latest Version](https://pypip.in/version/django-scraper/badge.svg)](https://pypi.python.org/pypi/django-scraper/)
 
-**django-scraper** is a Django application which crawls and downloads online content following configurable instructions.
+**django-scraper** is a Django application for collecting online content following user-defined instructions
 
-* Extract content of given online website/pages and stored under JSON format
-* [new] Having option for compressing crawled data
-* [new] Transparently support AWS S3 storage 
-* [new] Customisable crawling requests for different use cases
-* Process can be started from Django management command (~cron job) or with Python code 
-* Browse and download content in linked pages, with given depth.
+Features
+--------
+
+* Extract content of given online website/pages and stored under JSON data
+* Crawl then extract content in multiple pages, with given depth.
+* Can download media files present in page
+* Have option for storing data under ZIP file
+* Support standard file system and AWS S3 storage
+* Customisable crawling requests for different scenarios
+* Process can be started from Django management command (~cron job) or with Python code
 * Support extracting multiple content (text, html, images, binary files) in the same page
 * Have content refinement (replacement) rules and black words filtering
-* Store and prevent duplication of downloaded content
-* Support proxy servers, and user-agents
+* Support custom proxy servers, and user-agents
 
-_The application is successfully tested with Django 1.6, 1.7 (under Python 2.6, 2.7)_
+_Support Django 1.6, 1.7, and 1.8_
 
 Important Notice
 ----------------
@@ -56,7 +59,7 @@ Otherwise, please use standard 'syncdb' command
     
 There is also an important configuration value should be added into `settings.py` file:
 
-    SCRAPER_CRAW_ROOT = '/path/to/local/storage'
+    SCRAPER_CRAWL_ROOT = '/path/to/local/storage'
 
 Some optional setting options are:
     
@@ -72,7 +75,7 @@ This one is a custom value which will be added at front of task ID (or download 
 Usage
 -----
 
-From version 0.3.0, there is no more `Source`. It's kind of broken into new models: `Spider`, `Collector`, `Selector`
+Since version 0.3.0, there is no more `Source`. It's kind of broken into new models: `Spider`, `Collector`, `Selector`
 
 * **Selector** - Definition of single data portion, which contains key (name), XPath to wanted content and data type
 * **Collector** - Contains list of Selectors which will extract data from a given page. Besides, it has replace rules, black words and option for download images.
@@ -84,6 +87,7 @@ From version 0.3.0, there is no more `Source`. It's kind of broken into new mode
 * `target_links` - List of XPath to links pointing to pages having content to be grabbed (entries, articles,...)
 * `expand_links` - List of XPath to links pointing to pages containing target pages. This relates to crawl_depth value.
 * `crawl_depth` - Max depth of scraping session. This relates to expand rules
+* `crawl_root` - Option for extracting starting page or bypass.
 * `collectors` - List of collectors which will extract data on target pages
 * `proxy` - Proxy server will be used when crawling current source
 * `user_agent` - User Agent value set in the header of every requests

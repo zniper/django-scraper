@@ -4,23 +4,23 @@
 .. image:: https://coveralls.io/repos/zniper/django-scraper/badge.svg?branch=master 
           :target: https://coveralls.io/r/zniper/django-scraper?branch=master
 
-**django-scraper** is a Django application which crawls and downloads online content following configurable instructions.
+**django-scraper** is a Django application for collecting online content following user-defined instructions
 
 Features
 ========
 
-* Extract content of given online website/pages and stored under JSON format
-* [new] Having option for compressing crawled data
-* [new] Transparently support AWS S3 storage 
-* [new] Customisable crawling requests for different use cases
-* Process can be started from Django management command (~cron job) or with Python code 
-* Browse and download content in linked pages, with given depth.
+* Extract content of given online website/pages and stored under JSON data
+* Crawl then extract content in multiple pages, with given depth.
+* Can download media files present in page
+* Have option for storing data under ZIP file
+* Support standard file system and AWS S3 storage
+* Customisable crawling requests for different scenarios
+* Process can be started from Django management command (~cron job) or with Python code
 * Support extracting multiple content (text, html, images, binary files) in the same page
 * Have content refinement (replacement) rules and black words filtering
-* Store and prevent duplication of downloaded content
-* Support proxy servers, and user-agents
+* Support custom proxy servers, and user-agents
 
-*The application is successfully tested with Django 1.6 and 1.7 (under Python 2.6, 2.7)*
+*Support Django 1.6, 1.7, and 1.8*
 
 Installation
 ============
