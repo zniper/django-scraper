@@ -21,6 +21,15 @@ Features
 
 _Support Django 1.6, 1.7, and 1.8_
 
+Samples
+-------
+
+Below is a sample result from scraping https://news.ycombinator.com/ask
+
+* [Reusult ZIP file](https://dl.dropboxusercontent.com/u/44239448/94f8f6d9-news.ycombinator.com.zip)
+* JSON result via a renderer:
+  ![JSON result](https://dl.dropboxusercontent.com/u/44239448/scraper-screen.jpg)
+
 Important Notice
 ----------------
 Since version 0.3.0, django-scraper have completely different data models, those have been redesigned to better work with complex requests and easier to maintain.

@@ -22,6 +22,17 @@ Features
 
 *Support Django 1.6, 1.7, and 1.8*
 
+Samples
+=======
+
+Below is sample result from scraping https://news.ycombinator.com/ask
+
+* `Result ZIP file <https://dl.dropboxusercontent.com/u/44239448/94f8f6d9-news.ycombinator.com.zip>`_
+* JSON result via a renderer:
+
+.. image:: https://dl.dropboxusercontent.com/u/44239448/scraper-screen.jpg
+             :target: https://dl.dropboxusercontent.com/u/44239448/scraper-screen.jpg
+
 Installation
 ============
 This application requires some other tools installed first::
