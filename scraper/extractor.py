@@ -8,7 +8,7 @@ from os.path import join
 from requests.exceptions import InvalidSchema, MissingSchema
 from lxml import etree
 
-from .config import DEFAULT_REPLACE_RULES
+from .config import DEFAULT_REPLACE_RULES, custom_loader
 from .utils import complete_url, get_uuid, get_link_info, get_content
 
 
@@ -46,15 +46,26 @@ class Extractor(object):
     def parse_content(self):
         """ Returns etree._Element object of target page """
         content = ''
-        try:
-            response = requests.get(
-                self._url, headers=self.headers, proxies=self.proxies)
-            content = response.content
-        except (InvalidSchema, MissingSchema):
-            with open(self._url, 'r') as target:
-                content = target.read()
-        self._html = content
-        return etree.HTML(content)
+        url = urlparse.urlparse(self._url)
+        if url.scheme and url.netloc:
+            try:
+                if custom_loader:
+                    content = custom_loader.get_source(
+                        self._url, headers=self.headers, proxies=self.proxies)
+                else:
+                    response = requests.get(
+                        self._url, headers=self.headers, proxies=self.proxies)
+                    content = response.content
+            except:
+                logger.exception('Error getting page: {0}'.format(self._url))
+        else:
+            try:
+                with open(self._url, 'r') as target:
+                    content = target.read()
+            except:
+                logger.exception('Cannot open file {0}'.format(self._url))
+        self._html = content.strip() or '<html></html>'
+        return etree.HTML(self._html)
 
     @property
     def location(self):

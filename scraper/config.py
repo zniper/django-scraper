@@ -1,5 +1,10 @@
 import re
+
 from django.conf import settings
+from django.utils.log import getLogger
+
+
+logger = getLogger('scraper')
 
 EXCLUDED_ATTRIBS = ('html')
 
@@ -25,6 +30,17 @@ PROTOCOLS = (
     ('https', 'HTTPS'),
 )
 
-COMPRESS_RESULT = getattr(settings, 'SCRAPER_COMPRESS_RESULT', False)
-TEMP_DIR = getattr(settings, 'SCRAPER_TEMP_DIR', '')
-CRAWL_ROOT = getattr(settings, 'SCRAPER_CRAWL_ROOT', '')
+SETTINGS = getattr(settings, 'SCRAPER_SETTINGS', {})
+
+COMPRESS_RESULT = SETTINGS.get('COMPRESS_RESULT', False)
+TEMP_DIR = SETTINGS.get('TEMP_DIR', '')
+CRAWL_ROOT = SETTINGS.get('CRAWL_ROOT', '')
+
+custom_loader = None
+if SETTINGS.get('CUSTOM_LOADER', None):
+    try:
+        module_path = SETTINGS['CUSTOM_LOADER']
+        from django.utils.importlib import import_module
+        custom_loader = import_module(module_path)
+    except:
+        logger.exception('Cannot load module {0}'.format(module_path))
