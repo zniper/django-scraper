@@ -9,14 +9,14 @@ from shutil import rmtree
 from django.db import models
 from django.db.models.signals import pre_delete
 from django.utils.log import getLogger
-from django.conf import settings
 from django.utils.translation import ugettext_lazy as _
 from django.core.files.storage import default_storage as storage
 from django.dispatch.dispatcher import receiver
 
 import base
 
-from .config import DATA_TYPES, PROTOCOLS, COMPRESS_RESULT, INDEX_JSON
+from .config import (DATA_TYPES, PROTOCOLS, INDEX_JSON, COMPRESS_RESULT,
+                     TEMP_DIR, NO_TASK_PREFIX)
 from .signals import post_crawl, post_scrape
 from .utils import (
     SimpleArchive, JSONResult, write_storage_file, move_to_storage)
@@ -184,8 +184,7 @@ class Spider(base.BaseCrawl):
         Returns:
             (result, path) - Result and path to collected content (dir or ZIP)
         """
-        self.task_id = task_id or \
-            settings.SCRAPER_NO_TASK_ID_PREFIX + str(uuid.uuid4())
+        self.task_id = task_id or NO_TASK_PREFIX + str(uuid.uuid4())
 
         logger.info('[{0}] START CRAWLING: {1}'.format(
             self.task_id, self.url))
@@ -244,7 +243,7 @@ class Spider(base.BaseCrawl):
         if COMPRESS_RESULT:
             archive = SimpleArchive(
                 crawl_id + '.zip',
-                join(settings.SCRAPER_TEMP_DIR, self.storage_location))
+                join(TEMP_DIR, self.storage_location))
             archive.write(INDEX_JSON, crawl_json)
             # Write result files
             for res_id in result_paths:
@@ -370,7 +369,7 @@ def create_result(data, task_id=None, local_content=None):
     if task_id is None:
         duplicated = True
         while duplicated:
-            task_id = settings.SCRAPER_NO_TASK_ID_PREFIX + str(uuid.uuid4())
+            task_id = NO_TASK_PREFIX + str(uuid.uuid4())
             if not Result.objects.filter(task_id=task_id).exists():
                 break
     res = Result(task_id=task_id, data=data)

@@ -5,7 +5,6 @@ import logging
 import urlparse
 
 from os.path import join
-from requests.exceptions import InvalidSchema, MissingSchema
 from lxml import etree
 
 from .config import DEFAULT_REPLACE_RULES, custom_loader
