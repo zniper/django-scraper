@@ -8,5 +8,8 @@ class Command(NoArgsCommand):
 
     def handle_noargs(self, **options):
         spiders = Spider.objects.all()
+        operations = [
+            {'action': 'crawl', 'target': 'content'}
+        ]
         for spider in spiders:
-            spider.crawl_content()
+            spider.operate(operations)

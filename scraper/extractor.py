@@ -6,6 +6,7 @@ import urlparse
 
 from os.path import join
 from lxml import etree
+from readability.readability import Document
 
 from .config import DEFAULT_REPLACE_RULES, custom_loader
 from .utils import complete_url, get_uuid, get_link_info, get_content
@@ -22,16 +23,16 @@ class Extractor(object):
     _archive = None
     headers = {}
 
-    def __init__(self, url, base_dir='.', proxies=None, user_agent=None):
-        self._url = url
+    def __init__(self, url, base_dir='.', html='', proxies=None,
+                 user_agent=None):
         self.proxies = proxies
         self.headers['User-Agent'] = user_agent if user_agent else ''
         self.base_dir = base_dir
-        self.root = self.parse_content()
+        self.load_source(url, html)
         self._location = self.location
 
     def xpath(self, value):
-        """ Support calling xpath() from root element """
+        """Supports calling xpath() from root element"""
         try:
             elements = self.root.xpath(value)
             # Deal with the case of injected <tbody> by browser
@@ -39,31 +40,47 @@ class Extractor(object):
                 elements = self.root.xpath(value.replace('tbody/', ''))
             return elements
         except etree.XPathEvalError:
-            logger.exception('Cannot evaluate XPath value: {0}'.format(value))
+            logger.exception('Invalue XPath value \'{0}\''.format(value))
         return []
 
-    def parse_content(self):
-        """ Returns etree._Element object of target page """
-        content = ''
-        url = urlparse.urlparse(self._url)
-        if url.scheme and url.netloc:
-            try:
-                if custom_loader:
-                    content = custom_loader.get_source(
-                        self._url, headers=self.headers, proxies=self.proxies)
-                else:
-                    response = requests.get(
-                        self._url, headers=self.headers, proxies=self.proxies)
-                    content = response.content
-            except:
-                logger.exception('Error getting page: {0}'.format(self._url))
+    def load_source(self, url, html=''):
+        """Loads HTML source from given URL or direct HTML content.
+        Args:
+            url - (required) URL of a page
+            html - HTML source, this prevents loading page at URL
+        Returns: Etree element
+        """
+        if not html:
+            html = self.get_source(url)
+        self.root = self.parse_content(html)
+        self._url = url
+
+    def get_source(self, url):
+        """Loads page content from given URL
+        Returns: HTML content (source)
+        """
+        try:
+            arguments = {
+                'url': url,
+                'headers': self.headers,
+                'proxies': self.proxies
+            }
+            if custom_loader:
+                content = custom_loader.get_source(**arguments)
+            else:
+                content = requests.get(**arguments).content
+            return content
+        except:
+            logger.exception('Unable to browse \'{0}\''.format(url))
+
+    def parse_content(self, html=''):
+        """ Returns etree._Element object of target page
+            html - If provided, this will be used over content at given url
+        """
+        if isinstance(html, basestring) and html:
+            self._html = html.strip()
         else:
-            try:
-                with open(self._url, 'r') as target:
-                    content = target.read()
-            except:
-                logger.exception('Cannot open file {0}'.format(self._url))
-        self._html = content.strip() or '<html></html>'
+            self._html = '<html></html>'
         return etree.HTML(self._html)
 
     @property
@@ -88,12 +105,9 @@ class Extractor(object):
         for xpath in xpaths:
             for element in self.xpath(xpath):
                 link = get_link_info(element, make_root)
-                if not link:
+                if not link or (unique and link['url'] in urls):
                     continue
-                if unique:
-                    if link['url'] in urls:
-                        continue
-                    urls.append(link['url'])
+                urls.append(link['url'])
                 links.append(self.complete_url(link))
         return links
 
@@ -171,6 +185,17 @@ class Extractor(object):
             'uuid': self._uuid,
         }, self.location)
 
+    def extract_article(self):
+        """Returns only readable content
+        Returns:
+            data - {
+                'title': 'Title of the article',
+                'content': 'HTML body of the article'
+            }
+        """
+        doc = Document(self._html)
+        return {'title': doc.title(), 'content': doc.summary()}
+
     def extract_images(self, element, *args, **kwargs):
         """Find all images inside given element and return those URLs"""
         # Download images if required
@@ -219,7 +244,6 @@ class Extractor(object):
             except requests.ConnectionError:
                 logger.info('Retry downloading file: %s' % file_url)
             lives -= 1
-        return None
 
     def refine_content(self, content, custom_rules=None):
         """ rules should adapt formats:

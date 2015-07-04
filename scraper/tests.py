@@ -1,14 +1,11 @@
 from django.test import TestCase
-from django.conf import settings
 from django.core.files.storage import default_storage as storage
 
 import os
-import simplejson as json
 
 from zipfile import ZipFile
 from os.path import join
 from shutil import rmtree
-from zipfile import ZipFile
 
 from scraper import utils, models, config
 from scraper.extractor import Extractor
@@ -45,6 +42,7 @@ def exists(path):
         res = storage.listdir(parent)
         return name in res[0] or name in res[1]
 
+
 class UserAgentTests(TestCase):
 
     def test_create(self):
@@ -66,12 +64,16 @@ class ProxyServerTests(TestCase):
         self.assertNotEqual(proxy.pk, None)
 
 
+def get_extractor(file_name):
+    html = open(get_path(file_name), 'r').read()
+    return Extractor('http://127.0.0.1/', html=html)
+
+
 class ExtractorLocalTests(TestCase):
 
     @classmethod
     def setUpClass(self):
-        target_file = get_path('yc.0.html')
-        self.extractor = Extractor(target_file)
+        self.extractor = get_extractor('yc.0.html')
 
     @classmethod
     def tearDownClass(self):
@@ -82,8 +84,17 @@ class ExtractorLocalTests(TestCase):
         self.assertNotEqual(self.extractor._uuid, '')
         self.assertNotEqual(self.extractor.root, None)
 
+    def test_parse_invalid_content(self):
+        for val in ['', None, 'Anything', '<html>']:
+            res = self.extractor.parse_content(val)
+            self.assertNotEqual(res, None)
+
+    def test_get_invalid_source(self):
+        self.assertEqual(self.extractor.get_source(''), None)
+        self.assertEqual(self.extractor.get_source('error://file'), None)
+
     def test_unique_location(self):
-        new_extractor = Extractor(get_path('yc.0.html'))
+        new_extractor = Extractor('http://127.0.0.1/', html='<html></html>')
         self.assertNotEqual(self.extractor.location, new_extractor.location)
 
     def test_complete_url_no_http(self):
@@ -117,9 +128,22 @@ class ExtractorLocalTests(TestCase):
         self.assertEqual(links[0]['url'],
                          'https://posthaven.com/')
 
+    def test_extract_article(self):
+        html = open(get_path('yc.a0.html'), 'r').read()
+        extr = Extractor('http://127.0.0.1/', html=html)
+        data = extr.extract_article()
+        self.assertNotEqual(data['title'], '')
+        self.assertEqual(data['content'][:6], '<html>')
+
     def test_get_path(self):
         file_path = self.extractor.get_path(__file__)
         self.assertGreater(len(file_path), 0)
+
+    def test_invalid_xpath(self):
+        res = self.extractor.xpath('~something-wrong')
+        self.assertEqual(res, [])
+        res = self.extractor.xpath('')
+        self.assertEqual(res, [])
 
     def test_refine_content(self):
         with open(get_path('yc.0.html'), 'r') as index:
@@ -228,6 +252,10 @@ class ExtractorOnlineTests(TestCase):
         self.assertEqual(path, self.extractor.location)
         self.assertEqual(len(os.listdir(path)), 1)
 
+    def test_download_error(self):
+        res = self.extractor.download_file('http://not.exist-for-sure/')
+        self.assertEqual(res, None)
+
 
 class SpiderMock(object):
     def __init__(self, target=['//a'], expand=[]):
@@ -239,84 +267,105 @@ class CollectorTests(TestCase):
 
     def setUp(self):
         self.compress_option = models.COMPRESS_RESULT
+        self.collector = models.Collector(name='news-content')
+        self.collector.extractor = get_extractor('yc.0.html')
+        self.selector0 = models.Selector(
+            key='body',
+            xpath="//div[@class='post-body']",
+            data_type='html'
+        )
+        self.selector0.save()
 
     def tearDown(self):
         models.COMPRESS_RESULT = self.compress_option
+        if os.path.exists(self.collector.extractor.location):
+            rmtree(self.collector.extractor.location)
 
     def test_get_links(self):
         # Create collector, selectors then spider
-        collector = models.Collector(name='news-content')
-        collector.save()
-        result = collector.get_links(get_url('yc.0.html'))
-        self.assertNotEqual(result, None)
-        self.assertEqual(len(result.data['content']), 81)
+        data = self.collector.get_links()
+        self.assertNotEqual(data, None)
+        self.assertEqual(len(data.content), 81)
 
     def test_get_page(self):
         # Create collector, selectors then spider
-        collector = models.Collector(name='news-content')
-        collector.save()
-        result = collector.get_links(get_url('yc.0.html'))
-        self.assertNotEqual(result, None)
-        self.assertGreater(len(result.data['content']), 10)
+        data = self.collector.get_page()
+        self.assertNotEqual(data, None)
+        self.assertGreater(len(data.content), 10)
+
+    def test_get_article(self):
+        # Create collector, selectors then spider
+        self.collector.extractor = get_extractor('yc.a0.html')
+        data = self.collector.get_article()
+        self.assertEqual(data.content['content'][:6], '<html>')
+        self.assertGreater(len(data.content['title']), 0)
 
     def test_get_content(self):
         # Create collector, selectors then spider
         models.COMPRESS_RESULT = False
-        collector = models.Collector(name='news-content')
-        collector.save()
+        self.collector.save()
         selector = models.Selector(
             key='body',
             xpath="//div[@class='post-body']",
             data_type='html'
         )
         selector.save()
-        collector.selectors.add(selector)
-        res = collector.get_content(get_url('yc.0.html'))
-        self.assertNotEqual(res['content']['body'], None)
-        self.assertEqual(storage.exists(res['extras']['path']), True)
+        self.collector.selectors.add(selector)
+        data = self.collector.get_content()
+        self.assertNotEqual(data.content['body'], None)
+        self.assertEqual(os.path.exists(data.extras['path']), True)
 
     def test_get_content_zip(self):
         models.COMPRESS_RESULT = True
         # Create collector, selectors then spider
-        collector = models.Collector(name='news-content')
-        collector.save()
-        selector = models.Selector(
-            key='body',
-            xpath="//div[@class='post-body']",
-            data_type='html'
-        )
-        selector.save()
-        collector.selectors.add(selector)
-        res = collector.get_content(get_url('yc.0.html'))
-        self.assertNotEqual(res['content']['body'], None)
-        self.assertEqual(storage.exists(res['extras']['path']), True)
+        self.collector.save()
+        self.collector.selectors.add(self.selector0)
+        res = self.collector.get_content()
+        self.assertNotEqual(res.content['body'], None)
+        self.assertEqual(os.path.exists(res.extras['path']), True)
 
-    def test_get_content_with_spider(self):
+    def test_get_content_explore(self):
         models.COMPRESS_RESULT = False
-        collector = models.Collector(name='news-content')
-        collector.save()
-        selector = models.Selector(
-            key='body',
-            xpath="//div[@class='post-body']",
-            data_type='html'
-        )
-        selector.save()
-        collector.selectors.add(selector)
-        spider = SpiderMock(
-            ['//div[@class="post-title"]//a'],
-            ['//header/a']
-        )
-        res = collector.get_content(get_url('yc.0.html'), spider=spider)
-        self.assertNotEqual(res['content']['body'], None)
-        self.assertEqual(len(res['extras']['target']), 3)
-        self.assertEqual(len(res['extras']['expand']), 1)
-        self.assertEqual(os.path.exists(res['extras']['path']), True)
+        self.collector.save()
+        self.collector.selectors.add(self.selector0)
+        explore = {
+            'target': ['//div[@class="post-title"]//a'],
+            'expand': ['//header/a']
+        }
+        res = self.collector.get_content(explore=explore)
+        self.assertNotEqual(res.content['body'], None)
+        self.assertEqual(len(res.extras['target']), 3)
+        self.assertEqual(len(res.extras['expand']), 1)
+        self.assertEqual(os.path.exists(res.extras['path']), True)
 
 
 class SpiderTests(TestCase):
 
     def setUp(self):
         self.compress_option = models.COMPRESS_RESULT
+        models.COMPRESS_RESULT = False
+
+        sel0 = models.Selector(
+            key='post',
+            xpath="//div[@class='post-body']",
+            data_type='html'
+        )
+        sel0.save()
+
+        col0 = models.Collector(name='news-content')
+        col0.save()
+        col0.selectors.add(sel0)
+
+        self.spider = models.Spider(
+            url=DATA_URL+'yc.0.html',
+            name='Test Source',
+            target_links=["//div[@class='post-title']/h2/a"],
+            expand_links=['//a[@rel="next"]'],
+            crawl_depth=1,
+        )
+        self.spider.save()
+        self.spider.collectors.add(col0)
+        self.spider._extractor = get_extractor('yc.0.html')
 
     def tearDown(self):
         models.COMPRESS_RESULT = self.compress_option
@@ -327,98 +376,99 @@ class SpiderTests(TestCase):
         else:
             return location
 
-    def test_crawl_basic(self):
-        models.COMPRESS_RESULT = False
-        # Create collector, selectors then spider
-        selector = models.Selector(
-            key='content',
-            xpath="//div[@class='post-body']",
-            data_type='html'
-        )
-        selector.save()
-        collector = models.Collector(name='news-content')
-        collector.save()
-        collector.selectors.add(selector)
-        spider = models.Spider(
-            url=DATA_URL+'yc.0.html',
-            name='Test Source',
-            target_links=["//div[@class='post-title']/h2/a"],
-            crawl_depth=1
-        )
-        spider.save()
-        spider.collectors.add(collector)
-        self.assertGreater(spider.pk, 0)
-        result, path = spider.crawl_content()
-        self.assertEqual(storage.exists(path), True)
-        result_json = result.data
-        self.assertEqual(len(result_json['content']), 3)
+    def test_crawl_content(self):
+        self.assertGreater(self.spider.pk, 0)
+        data = self.spider.crawl_content()
+        for p in data.extras['path']:
+            self.assertEqual(os.path.exists(p), True)
+        self.assertEqual(len(data.content), 3)
+        for key in data.content:
+            content = data.content[key]
+            self.assertNotIn('start', content)
+            self.assertNotIn('end', content)
+            self.assertNotIn('task', content)
+            self.assertNotIn('id', content)
+            self.assertIn('url', content)
+            self.assertIn('content', content)
+
+        for p in data.extras['path']:
+            if os.path.exists(p):
+                rmtree(p)
+
+    def test_perform_operation(self):
+        data = self.spider._perform(
+            action='get', target='links')
+        self.assertEqual(len(data.content), 81)
+        self.assertEqual(data.extras['action'], 'get')
+        self.assertEqual(data.extras['target'], 'links')
+
+    def test_operate(self):
+        operations = [
+            {'action': 'get', 'target': 'links'},
+            {'action': 'get', 'target': 'article'},
+        ]
+        TASK_ID = 'test-task-id'
+        result = self.spider.operate(operations, TASK_ID)
+        self.assertEqual(result.task_id, TASK_ID)
+        self.assertNotEqual(result.data['url'], '')
+        self.assertEqual(len(result.data['results']), 2)
+        self.assertEqual(len(result.data['results'][0]['content']), 81)
+        self.assertIsNone(result.other)
+
+    def test_operate_crawl(self):
+        operations = [
+            {'action': 'crawl', 'target': 'content'},
+        ]
+        self.spider._set_extractor(True)
+        result = self.spider.operate(operations, 'anything')
+        self.assertEqual(len(result.data['results']), 1)
+        self.assertEqual(len(result.data['results'][0]['content']), 3)
         self.assertGreater(result.other.pk, 0)
 
+        # Self cleanup
+        path = result.other.local_path
         if hasattr(storage, 'base_location'):
             rmtree(self.get_path(path))
         else:
             if storage.exists(path):
                 storage.delete(path)
 
-    def test_crawl_zip(self):
+    def test_operate_crawl_zip(self):
         models.COMPRESS_RESULT = True
-        # Create collector, selectors then spider
-        selector = models.Selector(
-            key='content',
-            xpath="//div[@class='post-body']",
-            data_type='html'
-        )
-        selector.save()
-        collector = models.Collector(name='news-content')
-        collector.save()
-        collector.selectors.add(selector)
-        spider = models.Spider(
-            url=DATA_URL+'yc.0.html',
-            name='Test Source',
-            target_links=["//div[@class='post-title']/h2/a"],
-            crawl_depth=1
-        )
-        spider.save()
-        spider.collectors.add(collector)
-        self.assertGreater(spider.pk, 0)
-        result, path = spider.crawl_content()
+        operations = [
+            {'action': 'crawl', 'target': 'content'},
+        ]
+        self.spider._set_extractor(True)
+        result = self.spider.operate(operations, 'anything')
+        self.assertEqual(len(result.data['results']), 1)
+        self.assertEqual(len(result.data['results'][0]['content']), 3)
+        self.assertGreater(result.other.pk, 0)
+
+        path = result.other.local_path
         self.assertIn('.zip', path)
         self.assertEqual(storage.exists(path), True)
-        result_json = result.data
-        self.assertEqual(len(result_json['content']), 3)
-        self.assertGreater(result.other.pk, 0)
         zfile = ZipFile(join(storage.base_location, path))
         self.assertEquals(len(zfile.namelist()), 6)
-        storage.delete(path)
 
-    def test_crawl_expand(self):
-        models.COMPRESS_RESULT = False
-        # Create collector, selectors then spider
-        selector = models.Selector(
-            key='content',
-            xpath="//div[@class='post-body']",
-            data_type='html'
-        )
-        selector.save()
-        collector = models.Collector(name='news-content')
-        collector.save()
-        collector.selectors.add(selector)
-        spider = models.Spider(
-            url=DATA_URL+'yc.0.html',
-            name='Test Source',
-            target_links=["//div[@class='post-title']/h2/a"],
-            expand_links=['//a[@rel="next"]'],
-            crawl_depth=2
-        )
-        spider.save()
-        spider.collectors.add(collector)
-        self.assertGreater(spider.pk, 0)
-        result, path = spider.crawl_content()
-        self.assertEqual(storage.exists(path), True)
-        result_json = result.data
-        self.assertEqual(len(result_json['content']), 5)
+        # Self cleanup
+        if hasattr(storage, 'base_location'):
+            os.remove(self.get_path(path))
+        else:
+            if storage.exists(path):
+                storage.delete(path)
+
+    def test_operate_crawl_expand(self):
+        self.spider.crawl_depth = 2
+        operations = [
+            {'action': 'crawl', 'target': 'content'},
+        ]
+        self.spider._set_extractor(True)
+        result = self.spider.operate(operations, 'any-id')
+        self.assertEqual(len(result.data['results']), 1)
+        self.assertEqual(len(result.data['results'][0]['content']), 5)
         self.assertGreater(result.other.pk, 0)
 
+        path = result.other.local_path
         if hasattr(storage, 'base_location'):
             rmtree(self.get_path(path))
         else:
@@ -427,7 +477,6 @@ class SpiderTests(TestCase):
 
 
 class SimpleArchiveTests(TestCase):
-
     base_dir = 'test-simplearchive-tmp'
     storage_dir = 'test-simplearchive-storage'
 
@@ -523,3 +572,17 @@ class MiscTests(TestCase):
         self.assertEqual(
             storage.exists(join(new_path, 'normal_dir/02.txt')), True)
         self.assertEqual(storage.exists(join(new_path, '01.txt')), True)
+
+    def test_remove_local_files(self):
+        file_path = join(config.TEMP_DIR, 'test_remove_local.txt')
+        with open(file_path, 'w') as wfile:
+            wfile.write('dummy')
+        new_path = utils.move_to_storage(storage, file_path, 'tests')
+        local = models.LocalContent(
+            url='http://whatever',
+            local_path=new_path,
+        )
+        self.assertEquals(storage.exists(new_path), True)
+        local.remove_files()
+        self.assertEqual(local.local_path, '')
+        self.assertEquals(storage.exists(new_path), False)

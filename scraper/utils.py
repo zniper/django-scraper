@@ -18,20 +18,17 @@ from .config import DATETIME_FORMAT
 logger = logging.getLogger(__name__)
 
 
-class JSONResult(object):
-    """ Provide better way to produce JSON result, which will be put into
-    index.json and stored along with result objects """
+class Datum(object):
+    """Stores ouput data collected from set of operations, with additional
+    information"""
 
-    def __init__(self, action, *args, **kwargs):
-        self.action = action
+    def __init__(self, *args, **kwargs):
         self.uuid = kwargs.get('uuid') or kwargs.get('id')
         self.task = kwargs.get('task_id')
         self.url = kwargs.get('url')
         self.start = kwargs.get('start') or datetime.now()
         self.end = kwargs.get('end') or None
-        self.content = kwargs.get('content')
-        self.media = kwargs.get('media') or []
-        self.images = kwargs.get('images') or []
+        self.results = []
 
     @property
     def dict(self):
@@ -41,12 +38,9 @@ class JSONResult(object):
             'id': self.uuid,
             'task': self.task,
             'url': self.url,
-            'action': self.action,
             'start': print_time(self.start),
             'end': print_time(self.end),
-            'content': self.content,
-            'images': self.images,
-            'media': self.media,
+            'results': self.results,
         }
         return result
 
@@ -55,10 +49,32 @@ class JSONResult(object):
         for key in kwargs:
             self.__setattr__(key, kwargs[key])
 
+    def add_result(self, result):
+        self.results.append(result.dict)
+
     @cached_property
     def json(self):
         """ Return as pretty JSON """
         return json.dumps(self.dict, indent=2)
+
+
+class Data(object):
+    """Holds ouput of a single operation, supports export to JSON.
+        ...
+        extras - Holds non-result information"""
+    def __init__(self, content, media=None, images=None, **kwargs):
+        self.content = content
+        self.media = media or []
+        self.images = images or []
+        self.extras = kwargs
+
+    @property
+    def dict(self):
+        return self.__dict__
+
+    @property
+    def json(self):
+        return json.dumps(self.__dict__, indent=2)
 
 
 def complete_url(base, link):

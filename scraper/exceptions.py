@@ -1,0 +1,2 @@
+class ExtractorNotSet(Exception):
+    pass

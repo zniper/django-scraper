@@ -1,5 +1,6 @@
 import uuid
 import os
+import simplejson as json
 
 from datetime import datetime
 from os.path import join
@@ -13,22 +14,20 @@ from django.utils.translation import ugettext_lazy as _
 from django.core.files.storage import default_storage as storage
 from django.dispatch.dispatcher import receiver
 
-import base
-
 from .config import (DATA_TYPES, PROTOCOLS, INDEX_JSON, COMPRESS_RESULT,
                      TEMP_DIR, NO_TASK_PREFIX)
-from .signals import post_crawl, post_scrape
-from .utils import (
-    SimpleArchive, JSONResult, write_storage_file, move_to_storage)
+from .base import BaseCrawl, ExtractorMixin
+from .utils import SimpleArchive, Data, Datum
+from .utils import write_storage_file, move_to_storage
+from .signals import post_scrape
 
 
 logger = getLogger('scraper')
 
 
-class Collector(base.BaseCrawl):
+class Collector(ExtractorMixin, models.Model):
     """This could be a single site or part of a site which contains wanted
     content"""
-    # Basic infomation
     name = models.CharField(max_length=256)
     selectors = models.ManyToManyField('Selector', blank=True)
     get_image = models.BooleanField(
@@ -37,7 +36,6 @@ class Collector(base.BaseCrawl):
     # Dict of replacing rules (regex & new value):
     #    replace_rules = [('\<ul\>.*?\<ul\>', ''), ...]
     replace_rules = JSONField(
-        default={},
         help_text='List of Regex rules will be applied to refine data')
     # Extra settings
     black_words = models.CharField(max_length=256, blank=True, null=True)
@@ -45,107 +43,43 @@ class Collector(base.BaseCrawl):
     def __unicode__(self):
         return u'Collector: {0}'.format(self.name)
 
-    def get_page(self, url, task_id=None):
-        res = JSONResult(action='get_page', url=url, task_id=task_id)
-        extractor = self.get_extractor(url)
-        res.content = extractor._html
-        result = create_result(res.dict, task_id)
-        post_scrape.send(self.__class__, result=result)
-        return result
+    def get_page(self, **kwargs):
+        return Data(content=self.extractor._html)
 
-    def get_links(self, url, task_id=None):
-        res = JSONResult(action='get_links', url=url, task_id=task_id)
-        extractor = self.get_extractor(url)
-        res.content = extractor.extract_links(unique=False)
-        result = create_result(res.dict, task_id)
-        post_scrape.send(self.__class__, result=result)
-        return result
+    def get_links(self, **kwargs):
+        return Data(content=self.extractor.extract_links(unique=False))
 
-    def get_content(self, url, task_id=None, spider=None):
-        """ Download the content of a page specified by URL.
-        Arguments:
-            url - Address of the page to be processed
-            task_id - ID of the (Celery) task
-            spider - Work independently or under spider
+    def get_article(self, **kwargs):
+        return Data(content=self.extractor.extract_article())
+
+    def get_content(self, explore=None, **kwargs):
+        """ Extract content of a page specified by URL, using linked selectors
+        Args:
+            explore - A dict, for retrieving inclusive target and expand links
+                {'target': ['//a'], 'expand': ['//div/a']}
         Returns:
-            (result, path) - Result and path to collected content
-                If crawl=False: result is content dictionary
-                If crawl=True: result is a Result object
+            Data object
         """
-        jres = JSONResult(action='get_content', url=url, task_id=task_id)
-        logger.info('Scraping: %s' % url)
-
-        # Determine local files location. It musts be unique by collector.
-        extractor = self.get_extractor(url)
-
-        # Extract content from target pages, so target_xpaths and
-        # expand_xpaths are redundant
-        data, result_path = extractor.extract_content(
+        data, result_path = self.extractor.extract_content(
             get_image=self.get_image,
             selectors=self.selector_dict,
             replace_rules=self.replace_rules,
         )
-        jres.update(**data)
-
-        # Write index.json file
         if not os.path.exists(result_path):
             os.makedirs(result_path)
         with open(join(result_path, INDEX_JSON), 'w') as index_file:
-            index_file.write(jres.json)
-
-        op_result = jres.dict
-        extras = {}
-        if not spider:
-            # Run independently: create LocalContent and Result objects
-            final_path = self.finalize_result(result_path)
-            content = LocalContent(url=url, local_path=final_path)
-            content.save()
-            create_result(op_result, task_id, content)
-            extras['path'] = final_path
-        else:
-            # In case of running under spider, additional information
+            index_file.write(json.dumps(data))
+        extras = {'path': result_path}
+        if explore:
+            # In case of having exploring rules, additional information
             # like other target/expand links will also be collected
-            extras.update({'target': [], 'expand': []})
-            for link_type in ('target', 'expand'):
-                xpaths = getattr(spider, link_type + '_links')
-                for link in extractor.extract_links(xpaths, True):
-                    extras[link_type].append(link['url'])
-            logger.info('Found links: {0} targets, {1} expansions'.format(
-                len(extras['target']), len(extras['expand'])))
-            extras['path'] = result_path
-
-        op_result['extras'] = extras
-        post_scrape.send(self.__class__, result=op_result['id'])
-        return op_result
-
-    def finalize_result(self, result_path):
-        """ Compress and move the result to location in default storage """
-        result_id = os.path.basename(result_path)
-        logger.info('Finalizing result [{0}]'.format(result_id))
-
-        # Compress result if needed, then move it to storage
-        local_path = ''
-        if COMPRESS_RESULT:
-            archive = SimpleArchive(result_path + '.zip')
-            for item in os.listdir(result_path):
-                archive.write(
-                    item, open(join(result_path, item), 'r').read())
-            archive.finish()
-            local_path = archive.move_to_storage(
-                storage, self.storage_location)
-        else:
-            local_path = join(self.storage_location, result_id)
-            for item in os.listdir(result_path):
-                write_storage_file(
-                    storage, join(local_path, item),
-                    open(join(result_path, item), 'r').read())
-        try:
-            rmtree(result_path)
-        except OSError:
-            pass
-
-        logger.info('Result location: {0}'.format(result_path))
-        return local_path
+            for rule in explore.keys():
+                extras[rule] = []
+                for link in self.extractor.extract_links(explore[rule], True):
+                    extras[rule].append(link['url'])
+            extras['uuid'] = self.extractor._uuid
+        data.update(extras)
+        return Data(**data)
 
     @property
     def selector_dict(self):
@@ -156,12 +90,10 @@ class Collector(base.BaseCrawl):
         return data_xpaths
 
 
-class Spider(base.BaseCrawl):
+class Spider(ExtractorMixin, BaseCrawl):
     """ This does work of collecting wanted pages' address, it will auto jump
     to another page and continue finding."""
     name = models.CharField(max_length=256, blank=True, null=True)
-    url = models.URLField(_('Start URL'), max_length=256, help_text='URL of \
-        the starting page')
     crawl_root = models.BooleanField(
         _('Extract data from starting page'), default=False)
     # Link to different pages, all are XPath
@@ -171,21 +103,65 @@ class Spider(base.BaseCrawl):
         holding target links (will not be extracted)')
     crawl_depth = models.PositiveIntegerField(default=1, help_text='Set this > 1 \
         in case of crawling from this page')
-    collectors = models.ManyToManyField(Collector, blank=True)
+    collectors = models.ManyToManyField(
+        Collector, blank=True, related_name='spider')
 
     depths = None
     task_id = None
     crawl_links = None
 
-    def crawl_content(self, task_id=None):
+    def operate(self, operations, task_id=None):
+        """Performs all given operations on spider URL
+        Args:
+            operations - [
+                {'action': 'get', 'target': 'content'},
+                {'action': 'get', 'target': 'links'}
+                ...
+                ]
+        Returns: Result object
+        """
+        self._set_extractor()
+        has_files = False
+        datum = Datum(url=self.url, uuid=self.extractor._uuid, task_id=task_id)
+        for operation in operations:
+            data = self._perform(**operation)
+            datum.add_result(data)
+            if 'path' in data.extras and not has_files:
+                has_files = True
+        result = create_result(datum.dict, task_id)
+        if has_files:
+            result.other = self._finalize(datum)
+            result.save()
+        return result
+
+    def _perform(self, action, target, **kwargs):
+        """Perform operation based on given parameters. At the moment, only
+        one collector is supported"""
+        if action == 'get':
+            operator = self.collectors.first()
+            operator.extractor = self.extractor
+        elif action == 'crawl':
+            operator = self
+        method = getattr(operator, action+'_'+target)
+        data = method(**kwargs)
+        data.extras['action'] = action
+        data.extras['target'] = target
+        # Content extracting needs some more refinements
+        post_scrape.send(self.__class__, result=data.json)
+        return data
+
+    def _set_extractor(self, force=False):
+        if force or self._extractor is None:
+            self.extractor = self._new_extractor(self.url)
+        return self.extractor
+
+    def crawl_content(self, **kwargs):
         """ Extract all found links then scrape those pages
         Arguments:
             task_id - ID of the (Celery) task, will be genenrated if missing
         Returns:
             (result, path) - Result and path to collected content (dir or ZIP)
         """
-        self.task_id = task_id or NO_TASK_PREFIX + str(uuid.uuid4())
-
         logger.info('[{0}] START CRAWLING: {1}'.format(
             self.task_id, self.url))
 
@@ -195,23 +171,24 @@ class Spider(base.BaseCrawl):
         if self.crawl_root:
             self.crawl_links['target'].append(self.url)
             self.depths['target'][self.url] = 0
-        extractor = self.get_extractor(self.url)
-        self.aggregate_links(self.get_links(extractor), 1)
-        logger.info('Found links: {0} targets, {1} expansions'.format(
+        self.aggregate_links(self.get_links(self.extractor), 1)
+        logger.info('Found: {0} targets, {1} expansions'.format(
             len(self.crawl_links['target']), len(self.crawl_links['expand'])))
 
-        jres = JSONResult('crawl_content', uuid=extractor._uuid,
-                          url=self.url, task_id=self.task_id)
         combined_json = {}
-        result_paths = {}
+        result_paths = []
         while self.crawl_links['target'] or self.crawl_links['expand']:
             # Collect data and links from targeted links
             while self.crawl_links['target']:
                 target_url = self.crawl_links['target'].pop()
-                res = self.process_target(target_url)
-                extras = res.pop('extras')
-                combined_json[res['id']] = res
-                result_paths[res['id']] = extras['path']
+                data = self.process_target(target_url)
+                data_id = data.extras['uuid']
+                single_content = {
+                    'content': data.content,
+                    'url': data.extras['url']
+                }
+                combined_json[data_id] = single_content
+                result_paths.append(data.extras['path'])
             # ... and only links from expand links
             while self.crawl_links['expand']:
                 expand_url = self.crawl_links['expand'].pop()
@@ -221,90 +198,89 @@ class Spider(base.BaseCrawl):
                     continue
                 # Only extract target & expand links, so collector is not
                 # necessary
-                extr = self.get_extractor(expand_url)
+                extr = self._new_extractor(expand_url)
                 self.aggregate_links(self.get_links(extr), depth + 1)
 
         # Create the aggregated Result
-        jres.update(content=combined_json)
-        crawl_json = jres.json
-        crawl_result = create_result(crawl_json, self.task_id)
+        extras = {'path': result_paths}
+        return Data(content=combined_json, **extras)
 
-        # Finalize and move to storage
-        storage_path = self.finalize_result(
-            crawl_result, crawl_json, result_paths)
-        post_crawl.send(self.__class__, task_id=self.task_id)
-        return (crawl_result, storage_path)
-
-    def finalize_result(self, crawl_result, crawl_json, result_paths):
-        """ Finalize and move collected data to storage """
-        crawl_id = crawl_result.data['id']
+    def _finalize(self, datum):
+        """Should be called at final step in operate(). This finalizes and
+        move collected data to storage if having files downloaded"""
+        crawl_id = self.extractor._uuid
         logger.info('[{0}] Finalizing result [{1}]'.format(
             self.task_id, crawl_id))
+
+        data_paths = []
+        for data in datum.results:
+            if 'path' in data.get('extras', {}):
+                data_paths.extend(data['extras']['path'])
         if COMPRESS_RESULT:
             archive = SimpleArchive(
                 crawl_id + '.zip',
                 join(TEMP_DIR, self.storage_location))
-            archive.write(INDEX_JSON, crawl_json)
-            # Write result files
-            for res_id in result_paths:
-                res_path = result_paths[res_id]
-                for item in os.listdir(res_path):
-                    archive.write(
-                        join(res_id, item),
-                        open(join(res_path, item), 'r').read())
+            archive.write(INDEX_JSON, datum.json)
+            # Collect all content files from operations
+            # Move those dirs into spider dir
+            for d_path in data_paths:
+                d_id = os.path.basename(d_path)
+                for item in os.listdir(d_path):
+                    archive.write(join(d_id, item),
+                                  open(join(d_path, item), 'r').read())
             storage_path = archive.move_to_storage(
                 storage, self.storage_location)
         else:
             storage_path = join(self.storage_location, crawl_id)
             write_storage_file(
-                storage, join(storage_path, 'index.json'), crawl_json)
-            for res_id in result_paths:
-                move_to_storage(
-                    storage, result_paths[res_id], storage_path)
+                storage, join(storage_path, 'index.json'), datum.json)
+            for d_path in data_paths:
+                move_to_storage(storage, d_path, storage_path)
 
         # Assign LocalContent object
-        content = LocalContent(url=self.url, local_path=storage_path)
-        content.save()
-        crawl_result.other = content
-        crawl_result.save()
+        local_content = LocalContent(url=self.url, local_path=storage_path)
+        local_content.save()
 
-        for path in result_paths:
+        for path in data_paths:
             try:
                 rmtree(path)
             except OSError:
-                pass
-
+                logger.info('Unable to remove temp dir: {0}'.format(path))
         logger.info('[{0}] Result location: {1}'.format(
             self.task_id, storage_path))
-        return storage_path
+        return local_content
 
     def process_target(self, url):
         """ Perform collecting data in specific target url
         Args:
             url - Address of the page to be collected
-        Returns:
-            JSON of collected data
-                {
-                    'content':
-                    'extras': {
-                        'path':
-                        'target':
-                        'expand':
-                    },
-                    ...
-                }
+        Returns: JSON of collected data
+            {
+                'content':
+                'extras': {
+                    'path':
+                    'target':
+                    'expand':
+                },
+                ...
+            }
         """
-        depth = self.depths['target'][url]
         collector = self.collectors.first()
-        res = collector.get_content(url, task_id=self.task_id, spider=self)
-        extras = res['extras']
-        # Handle the extracted links (target & expand). Bind those
-        # with the depth if still in limit
+        collector.extractor = self._new_extractor(url)
+        data = collector.get_content(explore={
+            'target': self.target_links,
+            'expand': self.expand_links
+        })
+        # Handle the extracted links (target & expand). Bind those  with the
+        # depth if still in limit
+        data.extras['url'] = url
+        extras = data.extras
+        depth = self.depths['target'][url]
         if depth < self.crawl_depth:
-            self.aggregate_links({'target': extras['target']}, depth + 1)
+            self.aggregate_links({'target': extras['target']}, depth+1)
             if depth < self.crawl_depth - 1:
-                self.aggregate_links({'expand': extras['expand']}, depth + 1)
-        return res
+                self.aggregate_links({'expand': extras['expand']}, depth+1)
+        return data
 
     def aggregate_links(self, links, depth):
         """ Aggregate given links (with target & expand) into
@@ -346,7 +322,7 @@ class Result(models.Model):
     It is implemented for better adapts when called by queuing system. """
     task_id = models.CharField(max_length=64, blank=True, null=True)
     data = JSONField()
-    other = models.ForeignKey('LocalContent', null=True, blank=True,
+    other = models.ForeignKey('LocalContent', blank=True, null=True,
                               on_delete=models.SET_NULL)
 
     def __unicode__(self):
@@ -395,12 +371,17 @@ class LocalContent(models.Model):
     def remove_files(self):
         """Remove all files in storage of this LocalContent instance"""
         self.fresh = False
+        if not storage.exists(self.local_path):
+            return
         try:
-            dirs, files = storage.listdir(self.local_path)
-            for fn in files:
-                storage.delete(join(self.local_path, fn))
+            if os.path.isdir(self.local_path):
+                dirs, files = storage.listdir(self.local_path)
+                for fn in files:
+                    storage.delete(join(self.local_path, fn))
+            else:
+                storage.delete(self.local_path)
         except OSError:
-            logger.error('Error when deleting local files in {0}'.format(
+            logger.error('Error when deleting: {0}'.format(
                 self.local_path))
         self.local_path = ''
         self.state = 1
