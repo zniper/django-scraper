@@ -112,21 +112,11 @@ class ExtractorLocalTests(TestCase):
         url = self.extractor.complete_url('https://google.com')
         self.assertEqual(url, 'https://google.com')
 
-    def test_extract_links_duplicate(self):
-        links = self.extractor.extract_links(unique=False)
-        self.assertEqual(len(links), 81)
-        self.assertEqual(links[0]['url'],
-                         'https://posthaven.com/')
-        self.assertEqual(links[19]['url'],
-                         'http://www.fastcompany.com/3042861/the-y-combinator-chronicles/the-secret-million-that-y-combinator-invests-in-all-its-startups')
-        self.assertEqual(links[19]['text'],
-                         u'Transcriptic\xc2\xa0(YC W15) and the array of free services for new YC startups')
-
     def test_extract_links_unique(self):
-        links = self.extractor.extract_links(unique=True)
+        links = self.extractor.extract_links()
         self.assertEqual(len(links), 74)
-        self.assertEqual(links[0]['url'],
-                         'https://posthaven.com/')
+        link = {'url': 'https://posthaven.com/', 'text': ''}
+        self.assertEqual(link in links, True)
 
     def test_extract_article(self):
         html = open(get_path('yc.a0.html'), 'r').read()
@@ -253,8 +243,8 @@ class ExtractorOnlineTests(TestCase):
         self.assertEqual(len(os.listdir(path)), 1)
 
     def test_download_error(self):
-        res = self.extractor.download_file('http://not.exist-for-sure/')
-        self.assertEqual(res, None)
+        res = self.extractor.download_file('http://github.com/not.exist-for-sure-acb2afq1/')
+        self.assertIn(res, (None, ''))
 
 
 class SpiderMock(object):
@@ -285,7 +275,7 @@ class CollectorTests(TestCase):
         # Create collector, selectors then spider
         data = self.collector.get_links()
         self.assertNotEqual(data, None)
-        self.assertEqual(len(data.content), 81)
+        self.assertEqual(len(data.content), 74)
 
     def test_get_page(self):
         # Create collector, selectors then spider
@@ -398,7 +388,7 @@ class SpiderTests(TestCase):
     def test_perform_operation(self):
         data = self.spider._perform(
             action='get', target='links')
-        self.assertEqual(len(data.content), 81)
+        self.assertEqual(len(data.content), 74)
         self.assertEqual(data.extras['action'], 'get')
         self.assertEqual(data.extras['target'], 'links')
 
@@ -412,7 +402,7 @@ class SpiderTests(TestCase):
         self.assertEqual(result.task_id, TASK_ID)
         self.assertNotEqual(result.data['url'], '')
         self.assertEqual(len(result.data['results']), 2)
-        self.assertEqual(len(result.data['results'][0]['content']), 81)
+        self.assertEqual(len(result.data['results'][0]['content']), 74)
         self.assertIsNone(result.other)
 
     def test_operate_crawl(self):

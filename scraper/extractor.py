@@ -93,23 +93,30 @@ class Extractor(object):
     def complete_url(self, path):
         return complete_url(self._url, path)
 
-    def extract_links(self, xpaths=['//a'], unique=True, make_root=False):
+    def extract_links(self, xpaths=['//a'], make_root=False):
         """ Collect all links in current page following given XPath values
         Arguments:
-            xpaths - List of XPath values of links
-            unique - Accept URL duplication in result or nor
             make_root - Add / at beginning of URL
         """
-        urls = []
-        links = []
+        links = {}
         for xpath in xpaths:
             for element in self.xpath(xpath):
                 link = get_link_info(element, make_root)
-                if not link or (unique and link['url'] in urls):
+                if link is None:
                     continue
-                urls.append(link['url'])
-                links.append(self.complete_url(link))
-        return links
+                url = link['url'].strip().rstrip('/').split('#', 1)[0]
+                scheme = urlparse.urlparse(url).scheme.lower()
+                if scheme not in ('', 'http', 'https'):
+                    continue
+                if url in links:
+                    if link['text'] and not links[url]['text']:
+                        del links[url]
+                    else:
+                        continue
+                links[url] = self.complete_url(link)
+        found_links = links.values()
+        found_links.sort()
+        return found_links
 
     def extract_content(self, selectors={}, get_image=True, replace_rules=[],
                         black_words=[]):
@@ -218,7 +225,7 @@ class Extractor(object):
             with open(file_path, 'w') as mfile:
                 mfile.write(content)
             return file_path
-        except OSError:
+        except (OSError, IOError):
             logger.exception('Cannot create file: {0}'.format(file_path))
 
     def get_path(self, file_name):
@@ -237,8 +244,8 @@ class Extractor(object):
                 response = requests.get(file_url, headers=self.headers,
                                         proxies=self.proxies)
                 if response.status_code == 200:
-                    self.write_file(file_name, response.content)
-                    return file_name
+                    if self.write_file(file_name, response.content):
+                        return file_name
                 else:
                     logger.error('Cannot downloading file %s' % url)
             except requests.ConnectionError:

@@ -47,7 +47,7 @@ class Collector(ExtractorMixin, models.Model):
         return Data(content=self.extractor._html)
 
     def get_links(self, **kwargs):
-        return Data(content=self.extractor.extract_links(unique=False))
+        return Data(content=self.extractor.extract_links())
 
     def get_article(self, **kwargs):
         return Data(content=self.extractor.extract_article())
@@ -75,7 +75,7 @@ class Collector(ExtractorMixin, models.Model):
             # like other target/expand links will also be collected
             for rule in explore.keys():
                 extras[rule] = []
-                for link in self.extractor.extract_links(explore[rule], True):
+                for link in self.extractor.extract_links(explore[rule]):
                     extras[rule].append(link['url'])
             extras['uuid'] = self.extractor._uuid
         data.update(extras)
