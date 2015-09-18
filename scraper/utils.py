@@ -2,6 +2,7 @@ import os
 import logging
 import urlparse
 import simplejson as json
+import itertools
 
 from os.path import join
 from uuid import uuid4
@@ -18,7 +19,7 @@ from .config import DATETIME_FORMAT
 logger = logging.getLogger(__name__)
 
 
-class Datum(object):
+class Data(object):
     """Stores ouput data collected from set of operations, with additional
     information"""
 
@@ -58,7 +59,7 @@ class Datum(object):
         return json.dumps(self.dict, indent=2)
 
 
-class Data(object):
+class Datum(object):
     """Holds ouput of a single operation, supports export to JSON.
         ...
         extras - Holds non-result information"""
@@ -277,3 +278,19 @@ class SimpleArchive(object):
     def __str__(self):
         dsc = self._file.filename if self._file else '_REMOVED_'
         return 'SimpleArchive ({0})'.format(dsc)
+
+
+def generate_urls(base_url, elements=None):
+    """Returns every URL base on the starting URL and other values
+        base_url = 'http://domain/class-{0}/?name={1}'
+        elements = ((1, 2), ['jane', 'john'])
+    Returns:
+        [
+            'http://domain/class-1/?name=jane'
+            'http://domain/class-1/?name=john'
+            'http://domain/class-2/?name=jane'
+            'http://domain/class-2/?name=john'
+        ]
+    """
+    for comb in itertools.product(*elements):
+        yield base_url.format(*comb)

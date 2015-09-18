@@ -17,13 +17,12 @@ from django.dispatch.dispatcher import receiver
 from .config import (DATA_TYPES, PROTOCOLS, INDEX_JSON, COMPRESS_RESULT,
                      TEMP_DIR, NO_TASK_PREFIX)
 from .base import BaseCrawl, ExtractorMixin
-from .utils import SimpleArchive, Data, Datum
+from .utils import SimpleArchive, Datum, Data, generate_urls
 from .utils import write_storage_file, move_to_storage
 from .signals import post_scrape
 
 
 logger = getLogger('scraper')
-
 
 class Collector(ExtractorMixin, models.Model):
     """This could be a single site or part of a site which contains wanted
@@ -44,13 +43,13 @@ class Collector(ExtractorMixin, models.Model):
         return u'Collector: {0}'.format(self.name)
 
     def get_page(self, **kwargs):
-        return Data(content=self.extractor._html)
+        return Datum(content=self.extractor._html)
 
     def get_links(self, **kwargs):
-        return Data(content=self.extractor.extract_links())
+        return Datum(content=self.extractor.extract_links())
 
     def get_article(self, **kwargs):
-        return Data(content=self.extractor.extract_article())
+        return Datum(content=self.extractor.extract_article())
 
     def get_content(self, explore=None, **kwargs):
         """ Extract content of a page specified by URL, using linked selectors
@@ -58,7 +57,7 @@ class Collector(ExtractorMixin, models.Model):
             explore - A dict, for retrieving inclusive target and expand links
                 {'target': ['//a'], 'expand': ['//div/a']}
         Returns:
-            Data object
+            Datum object
         """
         data, result_path = self.extractor.extract_content(
             get_image=self.get_image,
@@ -79,7 +78,7 @@ class Collector(ExtractorMixin, models.Model):
                     extras[rule].append(link['url'])
             extras['uuid'] = self.extractor._uuid
         data.update(extras)
-        return Data(**data)
+        return Datum(**data)
 
     @property
     def selector_dict(self):
@@ -122,15 +121,15 @@ class Spider(ExtractorMixin, BaseCrawl):
         """
         self._set_extractor()
         has_files = False
-        datum = Datum(url=self.url, uuid=self.extractor._uuid, task_id=task_id)
+        data = Data(url=self.url, uuid=self.extractor._uuid, task_id=task_id)
         for operation in operations:
-            data = self._perform(**operation)
-            datum.add_result(data)
-            if 'path' in data.extras and not has_files:
+            datum = self._perform(**operation)
+            data.add_result(datum)
+            if 'path' in datum.extras and not has_files:
                 has_files = True
-        result = create_result(datum.dict, task_id)
+        result = create_result(data.dict, task_id)
         if has_files:
-            result.other = self._finalize(datum)
+            result.other = self._finalize(data)
             result.save()
         return result
 
@@ -140,7 +139,7 @@ class Spider(ExtractorMixin, BaseCrawl):
         if action == 'get':
             operator = self.collectors.first()
             operator.extractor = self.extractor
-        elif action == 'crawl':
+        else:
             operator = self
         method = getattr(operator, action+'_'+target)
         data = method(**kwargs)
@@ -203,9 +202,9 @@ class Spider(ExtractorMixin, BaseCrawl):
 
         # Create the aggregated Result
         extras = {'path': result_paths}
-        return Data(content=combined_json, **extras)
+        return Datum(content=combined_json, **extras)
 
-    def _finalize(self, datum):
+    def _finalize(self, data):
         """Should be called at final step in operate(). This finalizes and
         move collected data to storage if having files downloaded"""
         crawl_id = self.extractor._uuid
@@ -213,14 +212,14 @@ class Spider(ExtractorMixin, BaseCrawl):
             self.task_id, crawl_id))
 
         data_paths = []
-        for data in datum.results:
-            if 'path' in data.get('extras', {}):
-                data_paths.extend(data['extras']['path'])
+        for datum in data.results:
+            if 'path' in datum.get('extras', {}):
+                data_paths.extend(datum['extras']['path'])
         if COMPRESS_RESULT:
             archive = SimpleArchive(
                 crawl_id + '.zip',
                 join(TEMP_DIR, self.storage_location))
-            archive.write(INDEX_JSON, datum.json)
+            archive.write(INDEX_JSON, data.json)
             # Collect all content files from operations
             # Move those dirs into spider dir
             for d_path in data_paths:
@@ -233,7 +232,7 @@ class Spider(ExtractorMixin, BaseCrawl):
         else:
             storage_path = join(self.storage_location, crawl_id)
             write_storage_file(
-                storage, join(storage_path, 'index.json'), datum.json)
+                storage, join(storage_path, 'index.json'), data.json)
             for d_path in data_paths:
                 move_to_storage(storage, d_path, storage_path)
 
@@ -413,7 +412,7 @@ class ProxyServer(models.Model):
         return u'Proxy Server: %s' % self.name
 
 
-# IT WILL BE BEST IF THESE BELOW COULD BE PLACED INTO SEPARATE MODULE
+# TODO it will be best if these below could be placed into separate module
 
 
 @receiver(pre_delete, sender=LocalContent)

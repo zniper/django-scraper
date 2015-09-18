@@ -40,7 +40,23 @@ settings.configure(
         'TEMP_DIR': 'tmp/',
         'NO_TASK_ID_PREFIX': '00-',
         'CUSTOM_LOADER': '',
-    }
+    },
+    LOGGING = {
+        'version': 1,
+        'handlers': {
+            'null': {
+                'level': 'DEBUG',
+                'class': 'django.utils.log.NullHandler',
+            },
+        },
+        'loggers': {
+            'django.db.backends': {
+                'handlers': ['null'],
+                'propagate': False,
+                'level': 'DEBUG',
+            },
+        }
+    },
 )
 
 

@@ -93,12 +93,13 @@ class Extractor(object):
     def complete_url(self, path):
         return complete_url(self._url, path)
 
-    def extract_links(self, xpaths=['//a'], make_root=False):
+    def extract_links(self, xpaths=None, make_root=False):
         """ Collect all links in current page following given XPath values
         Arguments:
             make_root - Add / at beginning of URL
         """
         links = {}
+        xpaths = xpaths or ['//a']
         for xpath in xpaths:
             for element in self.xpath(xpath):
                 link = get_link_info(element, make_root)
