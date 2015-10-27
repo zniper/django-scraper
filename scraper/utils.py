@@ -19,6 +19,9 @@ from .config import DATETIME_FORMAT
 logger = logging.getLogger(__name__)
 
 
+DATA_TEXT = ['html', 'text']
+
+
 class Data(object):
     """Stores ouput data collected from set of operations, with additional
     information"""
@@ -123,10 +126,15 @@ def get_single_content(element, data_type):
 
 def get_content(elements, data_type='html'):
     """Receive XPath result and returns appropriate content"""
+    # Eliminate empty string elements
+    items = []
     if hasattr(elements, '__iter__'):
-        return [get_single_content(el, data_type) for el in elements]
+        items = [get_single_content(el, data_type) for el in elements]
     else:
-        return get_single_content(elements, data_type)
+        items = get_single_content(elements, data_type)
+    if data_type in DATA_TEXT:
+        [items.remove(val) for val in items if not val]
+        return items
 
 
 def print_time(atime=None, with_time=True):
@@ -280,10 +288,20 @@ class SimpleArchive(object):
         return 'SimpleArchive ({0})'.format(dsc)
 
 
+def interval_to_list(interval):
+    """Convert interval string to list of number
+        '1-4'
+    Returns:
+        [1, 2, 3, 4]
+    """
+    elements = [e.strip().split('-') for e in interval.split(',')]
+    return [n for r in elements for n in range(int(r[0]), int(r[-1])+1)]
+
+
 def generate_urls(base_url, elements=None):
     """Returns every URL base on the starting URL and other values
         base_url = 'http://domain/class-{0}/?name={1}'
-        elements = ((1, 2), ['jane', 'john'])
+        elements = ((1, 2), ('jane', 'john'))
     Returns:
         [
             'http://domain/class-1/?name=jane'
@@ -292,5 +310,15 @@ def generate_urls(base_url, elements=None):
             'http://domain/class-2/?name=john'
         ]
     """
-    for comb in itertools.product(*elements):
+    # Convert the intervals into lists
+    refined = []
+    for element in elements:
+        full_list = []
+        for i, value in enumerate(element):
+            if isinstance(value, basestring) and '-' in value:
+                full_list.extend(interval_to_list(value))
+            else:
+                full_list.append(value)
+        refined.append(full_list)
+    for comb in itertools.product(*refined):
         yield base_url.format(*comb)

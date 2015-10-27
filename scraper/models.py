@@ -17,12 +17,13 @@ from django.dispatch.dispatcher import receiver
 from .config import (DATA_TYPES, PROTOCOLS, INDEX_JSON, COMPRESS_RESULT,
                      TEMP_DIR, NO_TASK_PREFIX)
 from .base import BaseCrawl, ExtractorMixin
-from .utils import SimpleArchive, Datum, Data, generate_urls
+from .utils import SimpleArchive, Datum, Data
 from .utils import write_storage_file, move_to_storage
 from .signals import post_scrape
 
 
 logger = getLogger('scraper')
+
 
 class Collector(ExtractorMixin, models.Model):
     """This could be a single site or part of a site which contains wanted
@@ -117,6 +118,7 @@ class Spider(ExtractorMixin, BaseCrawl):
                 {'action': 'get', 'target': 'links'}
                 ...
                 ]
+            task_id - Will be generated if missing
         Returns: Result object
         """
         self._set_extractor()
@@ -327,8 +329,21 @@ class Result(models.Model):
     def __unicode__(self):
         return u'Task Result <{0}>'.format(self.task_id)
 
-    def download(self):
-        pass
+    def get_data(self, clean=False):
+        """Return self.data. If clean is True, only data content will be
+        returned (time, url, ID,... will be excluded)."""
+        if clean:
+            content = []
+            for result in self.data['results']:
+                action = result['extras']['action']
+                res_content = result['content']
+                if action == 'crawl':
+                    items = [v['content'] for v in res_content.values()]
+                else:
+                    items = res_content
+                content.extend(items)
+            return content
+        return self.data
 
 
 def create_result(data, task_id=None, local_content=None):
