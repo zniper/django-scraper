@@ -107,8 +107,9 @@ class Spider(ExtractorMixin, BaseCrawl):
         Collector, blank=True, related_name='spider')
 
     depths = None
-    task_id = None
     crawl_links = None
+    _task = None
+    _work = None
 
     def operate(self, operations, task_id=None):
         """Performs all given operations on spider URL
@@ -123,13 +124,14 @@ class Spider(ExtractorMixin, BaseCrawl):
         """
         self._set_extractor()
         has_files = False
+        self._task = task_id
         data = Data(url=self.url, uuid=self.extractor._uuid, task_id=task_id)
         for operation in operations:
             datum = self._perform(**operation)
             data.add_result(datum)
             if 'path' in datum.extras and not has_files:
                 has_files = True
-        result = create_result(data.dict, task_id)
+        result = create_result(data.dict, self._task)
         if has_files:
             result.other = self._finalize(data)
             result.save()
@@ -159,12 +161,11 @@ class Spider(ExtractorMixin, BaseCrawl):
     def crawl_content(self, **kwargs):
         """ Extract all found links then scrape those pages
         Arguments:
-            task_id - ID of the (Celery) task, will be genenrated if missing
         Returns:
             (result, path) - Result and path to collected content (dir or ZIP)
         """
         logger.info('[{0}] START CRAWLING: {1}'.format(
-            self.task_id, self.url))
+            self._task, self.url))
 
         # Collect all target links from level 0
         self.depths = {'target': {}, 'expand': {}}
@@ -211,7 +212,7 @@ class Spider(ExtractorMixin, BaseCrawl):
         move collected data to storage if having files downloaded"""
         crawl_id = self.extractor._uuid
         logger.info('[{0}] Finalizing result [{1}]'.format(
-            self.task_id, crawl_id))
+            self._task, crawl_id))
 
         data_paths = []
         for datum in data.results:
@@ -248,7 +249,7 @@ class Spider(ExtractorMixin, BaseCrawl):
             except OSError:
                 logger.info('Unable to remove temp dir: {0}'.format(path))
         logger.info('[{0}] Result location: {1}'.format(
-            self.task_id, storage_path))
+            self._task, storage_path))
         return local_content
 
     def process_target(self, url):
