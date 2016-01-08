@@ -64,9 +64,10 @@ class ProxyServerTests(TestCase):
         self.assertNotEqual(proxy.pk, None)
 
 
-def get_extractor(file_name):
+def get_extractor(file_name, url=''):
     html = open(get_path(file_name), 'r').read()
-    return Extractor('http://127.0.0.1/', html=html)
+    url = url.strip() or 'http://127.0.0.1/'
+    return Extractor(url, html=html)
 
 
 class ExtractorLocalTests(TestCase):
@@ -88,10 +89,6 @@ class ExtractorLocalTests(TestCase):
         for val in ['', None, 'Anything', '<html>']:
             res = self.extractor.parse_content(val)
             self.assertNotEqual(res, None)
-
-    def test_get_invalid_source(self):
-        self.assertEqual(self.extractor.get_source(''), None)
-        self.assertEqual(self.extractor.get_source('error://file'), None)
 
     def test_unique_location(self):
         new_extractor = Extractor('http://127.0.0.1/', html='<html></html>')
@@ -355,7 +352,8 @@ class SpiderTests(TestCase):
         )
         self.spider.save()
         self.spider.collectors.add(col0)
-        self.spider._extractor = get_extractor('yc.0.html')
+        self.spider._extractor = get_extractor(
+            'yc.0.html', url=self.spider.url)
 
     def tearDown(self):
         models.COMPRESS_RESULT = self.compress_option

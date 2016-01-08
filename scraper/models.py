@@ -6,7 +6,6 @@ from datetime import datetime
 from os.path import join
 from jsonfield.fields import JSONField
 from shutil import rmtree
-from itertools import chain
 
 from django.db import models
 from django.db.models.signals import pre_delete
