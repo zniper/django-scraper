@@ -78,10 +78,13 @@ class Extractor(object):
             html - If provided, this will be used over content at given url
         """
         if isinstance(html, basestring) and html:
-            self._html = html.strip()
+            # Remove encoding inside HTML, let ElementTree deal with it
+            self._html = re.sub(
+                r'\sencoding=".*?"(?=.*\?\>)', '', html.strip())
         else:
             self._html = '<html></html>'
-        return etree.HTML(self._html)
+        parser = etree.HTML(self._html)
+        return parser
 
     @property
     def location(self):

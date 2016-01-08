@@ -41,7 +41,7 @@ class BaseCrawl(models.Model):
     def get_ua(self):
         return self.user_agent.value if self.user_agent else None
 
-    def _new_extractor(self, url):
+    def _new_extractor(self, url, source=''):
         """Return Extractor instance with given URL. If URL invalid, None will be
         returned"""
         splitted_url = urlparse.urlsplit(url)
@@ -50,7 +50,8 @@ class BaseCrawl(models.Model):
                 url,
                 base_dir=os.path.join(TEMP_DIR, self.storage_location),
                 proxies=self.get_proxy(),
-                user_agent=self.get_ua()
+                user_agent=self.get_ua(),
+                html=source
             )
             return extractor
         else:

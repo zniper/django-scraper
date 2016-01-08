@@ -6,6 +6,7 @@ from datetime import datetime
 from os.path import join
 from jsonfield.fields import JSONField
 from shutil import rmtree
+from itertools import chain
 
 from django.db import models
 from django.db.models.signals import pre_delete
@@ -17,8 +18,9 @@ from django.dispatch.dispatcher import receiver
 from .config import (DATA_TYPES, PROTOCOLS, INDEX_JSON, COMPRESS_RESULT,
                      TEMP_DIR, NO_TASK_PREFIX)
 from .base import BaseCrawl, ExtractorMixin
-from .utils import SimpleArchive, Datum, Data
-from .utils import write_storage_file, move_to_storage
+from .utils import (
+    SimpleArchive, Datum, Data, write_storage_file, move_to_storage,
+    download_batch)
 from .signals import post_scrape
 
 
@@ -179,11 +181,16 @@ class Spider(ExtractorMixin, BaseCrawl):
 
         combined_json = {}
         result_paths = []
+        page_sources = {}
         while self.crawl_links['target'] or self.crawl_links['expand']:
+            # Perform bulk download
+            page_sources.update(download_batch(
+                self.crawl_links['target'] + self.crawl_links['expand']))
+
             # Collect data and links from targeted links
             while self.crawl_links['target']:
-                target_url = self.crawl_links['target'].pop()
-                data = self.process_target(target_url)
+                url = self.crawl_links['target'].pop()
+                data = self.process_target(url, page_sources[url])
                 data_id = data.extras['uuid']
                 single_content = {
                     'content': data.content,
@@ -193,14 +200,14 @@ class Spider(ExtractorMixin, BaseCrawl):
                 result_paths.append(data.extras['path'])
             # ... and only links from expand links
             while self.crawl_links['expand']:
-                expand_url = self.crawl_links['expand'].pop()
-                depth = self.depths['expand'][expand_url]
+                url = self.crawl_links['expand'].pop()
+                depth = self.depths['expand'][url]
                 # Is this redundant check?
                 if depth >= self.crawl_depth:
                     continue
                 # Only extract target & expand links, so collector is not
                 # necessary
-                extr = self._new_extractor(expand_url)
+                extr = self._new_extractor(url, page_sources[url])
                 self.aggregate_links(self.get_links(extr), depth + 1)
 
         # Create the aggregated Result
@@ -252,10 +259,10 @@ class Spider(ExtractorMixin, BaseCrawl):
             self._task, storage_path))
         return local_content
 
-    def process_target(self, url):
+    def process_target(self, url, source=''):
         """ Perform collecting data in specific target url
         Args:
-            url - Address of the page to be collected
+            content - source of the target page
         Returns: JSON of collected data
             {
                 'content':
@@ -268,7 +275,7 @@ class Spider(ExtractorMixin, BaseCrawl):
             }
         """
         collector = self.collectors.first()
-        collector.extractor = self._new_extractor(url)
+        collector.extractor = self._new_extractor(url, source)
         data = collector.get_content(explore={
             'target': self.target_links,
             'expand': self.expand_links

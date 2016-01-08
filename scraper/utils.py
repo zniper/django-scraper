@@ -3,21 +3,25 @@ import logging
 import urlparse
 import simplejson as json
 import itertools
+import requests
 
+from time import sleep
 from os.path import join
 from uuid import uuid4
 from zipfile import ZipFile
 from datetime import datetime
 from lxml import etree
 from shutil import rmtree
+from Queue import Queue
+from threading import Thread
 
 from django.utils.functional import cached_property
 
-from .config import DATETIME_FORMAT
-
+from .config import (
+    custom_loader, DATETIME_FORMAT, CONCURRENT_DOWNLOADS, QUEUE_WAIT_PERIOD
+    )
 
 logger = logging.getLogger(__name__)
-
 
 DATA_TEXT = ['html', 'text']
 
@@ -322,3 +326,50 @@ def generate_urls(base_url, elements=None):
         refined.append(full_list)
     for comb in itertools.product(*refined):
         yield base_url.format(*comb)
+
+
+def download_batch(urls, **kwargs):
+    """
+    Download multiple pages at same time, then returning a dict of page
+    content.
+        urls - ['http://first/page', 'http://second/page']
+        kwargs - Optional params to be transferred to worker
+    Returns:
+        {
+            'http://first/page': 'page content...',
+            'http://second/page': 'page content 2...'
+        }
+    """
+    results = {}
+    if urls:
+        url_queue = Queue()
+        [url_queue.put(url) for url in urls]
+        for i in xrange(min(len(urls), CONCURRENT_DOWNLOADS)):
+            worker = Thread(target=download_worker,
+                            args=(url_queue, results))
+            worker.setDaemon(True)
+            worker.start()
+        while url_queue.unfinished_tasks:
+            sleep(QUEUE_WAIT_PERIOD)
+    return results
+
+
+def download_worker(queue, results, **kwargs):
+    """
+    Keep waiting and perform download when having url inside queue.
+        queue - Queue object with URLs inside
+        results - Dictionary for holding downloaded sources
+        ...
+    """
+    while not queue.empty():
+        url = queue.get()
+        try:
+            kwargs['url'] = url
+            if custom_loader:
+                content = custom_loader.get_source(**kwargs)
+            else:
+                content = requests.get(**kwargs).content
+            results[url] = content
+        except:
+            logger.exception('Unable to browse \'{0}\''.format(url))
+        queue.task_done()
