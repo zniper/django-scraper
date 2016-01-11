@@ -1,10 +1,10 @@
 import re
+import logging
 
 from django.conf import settings
-from django.utils.log import getLogger
 
 
-logger = getLogger('scraper')
+logger = logging.getLogger(__name__)
 
 EXCLUDED_ATTRIBS = ('html')
 

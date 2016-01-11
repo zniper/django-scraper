@@ -1,17 +1,17 @@
 import urlparse
 import os
+import logging
 
 from datetime import datetime
 
 from django.db import models
-from django.utils.log import getLogger
 from django.utils.translation import ugettext_lazy as _
 
 from .extractor import Extractor
 from .config import CRAWL_ROOT, TEMP_DIR
 from .exceptions import ExtractorNotSet
 
-logger = getLogger('scraper')
+logger = logging.getLogger(__name__)
 
 
 class BaseCrawl(models.Model):

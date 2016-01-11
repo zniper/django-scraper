@@ -1,6 +1,7 @@
 import uuid
 import os
 import simplejson as json
+import logging
 
 from datetime import datetime
 from os.path import join
@@ -9,7 +10,6 @@ from shutil import rmtree
 
 from django.db import models
 from django.db.models.signals import pre_delete
-from django.utils.log import getLogger
 from django.utils.translation import ugettext_lazy as _
 from django.core.files.storage import default_storage as storage
 from django.dispatch.dispatcher import receiver
@@ -23,7 +23,7 @@ from .utils import (
 from .signals import post_scrape
 
 
-logger = getLogger('scraper')
+logger = logging.getLogger(__name__)
 
 
 class Collector(ExtractorMixin, models.Model):

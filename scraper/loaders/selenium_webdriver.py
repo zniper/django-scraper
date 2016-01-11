@@ -1,11 +1,11 @@
+import logging
+
 from selenium import webdriver
 from selenium.webdriver.firefox.firefox_profile import FirefoxProfile
 from selenium.common.exceptions import WebDriverException
 
-from django.utils.log import getLogger
 
-
-logger = getLogger('scraper')
+logger = logging.getLogger('scraper')
 
 
 def get_profile():

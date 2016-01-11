@@ -12,7 +12,7 @@ from .config import DEFAULT_REPLACE_RULES, custom_loader
 from .utils import complete_url, get_uuid, get_link_info, get_content
 
 
-logger = logging.getLogger('scraper')
+logger = logging.getLogger(__name__)
 
 
 class Extractor(object):
