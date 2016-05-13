@@ -1,3 +1,4 @@
+import chardet
 import requests
 import os
 import re
@@ -77,6 +78,18 @@ class Extractor(object):
         """ Returns etree._Element object of target page
             html - If provided, this will be used over content at given url
         """
+        # Check if html is unicode string or not
+        if isinstance(html, bytes):
+            # Detect the encoding of html
+            try:
+                encoding = chardet.detect(html).get("encoding", None)
+            except:
+                encoding = None
+            # Decode html to unicode before passing it to etree
+            if encoding:
+                html = html.decode(encoding)
+            else:
+                html = html.decode("utf-8", "ignore")
         if isinstance(html, basestring) and html:
             # Remove encoding inside HTML, let ElementTree deal with it
             self._html = re.sub(
