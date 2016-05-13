@@ -78,14 +78,14 @@ class Extractor(object):
         """ Returns etree._Element object of target page
             html - If provided, this will be used over content at given url
         """
-        #Check if html is unicode string or not
+        # Check if html is unicode string or not
         if isinstance(html, bytes):
-            #Detect the encoding of html
+            # Detect the encoding of html
             try:
                 encoding = chardet.detect(html).get("encoding", None)
             except:
                 encoding = None
-            #Decode html to unicode before passing it to etree
+            # Decode html to unicode before passing it to etree
             if encoding:
                 html = html.decode(encoding)
             else:
