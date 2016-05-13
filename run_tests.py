@@ -5,6 +5,12 @@ import django
 
 from django.conf import settings
 
+try:
+    from logging import NullHandler
+
+    null_handler = 'logging.NullHandler'
+except ImportError:
+    null_handler = 'django.utils.log.NullHandler'
 
 current_dir = os.path.dirname(os.path.realpath(__file__))
 
@@ -28,7 +34,7 @@ settings.configure(
         'django.middleware.common.CommonMiddleware',
         'django.contrib.auth.middleware.AuthenticationMiddleware',
         'django.contrib.auth.middleware.SessionAuthenticationMiddleware',
-        ),
+    ),
     SITE_ID=1,
     TEMPLATE_DIRS=[
         os.path.abspath(os.path.join(
@@ -41,12 +47,12 @@ settings.configure(
         'NO_TASK_ID_PREFIX': '00-',
         'CUSTOM_LOADER': '',
     },
-    LOGGING = {
+    LOGGING={
         'version': 1,
         'handlers': {
             'null': {
                 'level': 'DEBUG',
-                'class': 'logging.NullHandler',
+                'class': null_handler,
             },
         },
         'loggers': {
@@ -59,13 +65,10 @@ settings.configure(
     },
 )
 
-
 if hasattr(django, "setup"):
     django.setup()
 
-
 from django_nose import NoseTestSuiteRunner
-
 
 test_runner = NoseTestSuiteRunner(verbosity=1)
 failures = test_runner.run_tests(["scraper"])
