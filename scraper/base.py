@@ -16,8 +16,8 @@ logger = logging.getLogger(__name__)
 
 class BaseCrawl(models.Model):
     """Provides base class for crawling and extracting classes"""
-    url = models.URLField(_('Start URL'), max_length=256, help_text='URL of \
-        the starting page')
+    # url = models.URLField(_('Start URL'), max_length=256, help_text='URL of \
+    #     the starting page')
     proxy = models.ForeignKey(
         'ProxyServer', blank=True, null=True, on_delete=models.PROTECT)
     user_agent = models.ForeignKey(
