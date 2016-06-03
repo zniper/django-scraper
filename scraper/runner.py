@@ -11,7 +11,7 @@ from lxml import etree
 
 from django.utils.encoding import force_text
 
-from scraper.config import TEMP_DIR, INDEX_JSON
+from scraper.config import TEMP_DIR, INDEX_JSON, INVALID_DATA
 from scraper.extractor import Extractor
 from scraper.utils import download_batch, get_link_info, Datum
 
@@ -92,6 +92,7 @@ class ListingPage(Page):
         # Create DetailPages and extract data from them.
         for data_item in data_items:
             for item in data[data_item.name]:
+                is_invalid = False
                 for collector in item["collectors"]:
                     # Create detailed pages for downloaded link.
                     for link in collector["links"]:
@@ -109,11 +110,24 @@ class ListingPage(Page):
                     # Extract data from detailed pages.
                     for page in collector["pages"]:
                         page_data, page_expand_links = page.extract_data()
-                        item["data"] = self.merge_data(
-                            item["data"], page_data)
+                        # Aggregate expand links
                         for link in page_expand_links:
                             if link not in expand_links:
                                 expand_links[link] = page.depth + 1
+                        # Check if page contains invalid data or not.
+                        if page_data == INVALID_DATA:
+                            # Cancel the collector because some fields has
+                            # invalid information.
+                            item["data"] = {}
+                            is_invalid = True
+                            break
+                        # Merge page's data to item's data
+                        item["data"] = self.merge_data(
+                            item["data"], page_data)
+                    if is_invalid:
+                        # Break the collector loop because one of collector has
+                        # invalid data
+                        break
         # Filter empty results
         for item_name in data:
             data[item_name] = [item["data"] for item in data[item_name]
@@ -278,12 +292,20 @@ class DetailedPage(Page):
     def extract_data(self):
         """Extract data from page."""
         logger.info("Start extracting detailed page {0}".format(self.url))
+
+        # Find expand links
+        expand_links = self.find_expand_links()
+
+        # Extract data from page with given set of selectors.
         selector_dict = self.collector.selector_dict
         data, result_path = self.extractor.extract_content(
             get_image=self.collector.get_image,
             selectors=selector_dict,
             replace_rules=self.collector.replace_rules,
         )
+        if data == INVALID_DATA:
+            # The data item is invalid
+            return data, expand_links
         # only return data if it's not empty
         is_empty = True
         for key in selector_dict:
@@ -291,9 +313,7 @@ class DetailedPage(Page):
                 is_empty = False
                 break
         if is_empty and not data["images"] and not data["media"]:
-            return None, {}
-        # Find expand links
-        expand_links = self.find_expand_links()
+            return None, expand_links
         return data, expand_links
 
 

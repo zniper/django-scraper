@@ -25,6 +25,8 @@ DATA_TYPES = (
     ('binary', 'Binary content'),
 )
 
+INVALID_DATA = -1
+
 PROTOCOLS = (
     ('http', 'HTTP'),
     ('https', 'HTTPS'),

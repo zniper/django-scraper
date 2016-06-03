@@ -330,7 +330,10 @@ class Selector(models.Model):
                                   related_name="selectors")
 
     def __str__(self):
-        return _('Selector: {0}').format(self.key)
+        return _('Selector: {0} - Collector: {1}').format(
+            self.key,
+            force_text(self.collector)
+        )
 
     def to_dict(self):
         return {

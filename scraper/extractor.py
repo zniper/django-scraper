@@ -12,8 +12,8 @@ from os.path import join
 from lxml import etree
 from readability.readability import Document
 
-from .config import DEFAULT_REPLACE_RULES, custom_loader
-from .utils import complete_url, get_uuid, get_link_info, get_content
+from .config import DEFAULT_REPLACE_RULES, custom_loader, INVALID_DATA
+from .utils import complete_url, get_uuid, get_link_info, get_content, DATA_TEXT
 
 logger = logging.getLogger(__name__)
 
@@ -137,8 +137,7 @@ class Extractor(object):
         found_links.sort()
         return found_links
 
-    def extract_content(self, selectors={}, get_image=True, replace_rules=[],
-                        black_words=[]):
+    def extract_content(self, selectors={}, get_image=True, replace_rules=[]):
         """ Extract the content from current extractor page following rules in
         selectors.
 
@@ -146,7 +145,6 @@ class Extractor(object):
             selectors - Dictionary of selectors, ex: {'key': {'xpath':'',..}}
             get_image - Download images if having HTML content
             replace_rules - List of rules for removing useless text data
-            black_words - Process will stop if one of these words found
 
         Returns - List of content dict and path to temp directory if existing
             (
@@ -175,9 +173,17 @@ class Extractor(object):
                 attribute = ""
             elements = self.xpath(xpath)
 
+            extracted_contents = elements
+            if attribute:
+                attrs = [element.get(attribute, "") for element in elements
+                         if element.get(attribute, "")]
+                extracted_contents = attrs
+            elif data_type in DATA_TEXT:
+                extracted_contents = get_content(elements, data_type)
+
             # Different handlers for each data_type value
             if data_type == 'binary':
-                for url in elements:
+                for url in extracted_contents:
                     # The element must be string to downloadable target
                     if not (isinstance(url, basestring) and url.strip()):
                         continue
@@ -186,21 +192,36 @@ class Extractor(object):
                     file_name = self.download_file(url)
                     if file_name:
                         media.append((file_name, description))
-            elif attribute:
-                attrs = [element.get(attribute, "") for element in elements
-                         if element.get(attribute, "")]
-                content[key] = attrs
             else:
-                tmp_content = get_content(elements, data_type)
-
-                # Stop operation if black word found
+                black_words = selectors[key].get("black_words", []) or []
+                required_words = selectors[key].get("required_words", []) or []
+                # Stop extraction if black word found
+                norm_content = ' '.join(extracted_contents).lower()
                 for word in black_words:
-                    norm_content = ' '.join(tmp_content).lower()
-                    if norm_content.find(word) != -1:
-                        logger.info('Bad word found (%s). Downloading stopped.'
-                                    % word)
+                    if norm_content.find(word.lower()) != -1:
+                        logger.info('Bad word found (%s) in selector (%s). '
+                                    'Extraction stopped.' % (word, key))
                         # A ROLLBACK CASE SHOULD BE IMPLEMENTED
-                        return (None, '')
+                        return (INVALID_DATA, '')
+
+                # Stop extraction if required words not found
+                if required_words:
+                    has_required_words = False
+                    for word_set in required_words:
+                        if not hasattr(word_set, '__iter__'):
+                            word_set = [word_set]
+                        has_word_set = True
+                        for word in word_set:
+                            if norm_content.find(word.lower()) == -1:
+                                has_word_set = False
+                                break
+                        if has_word_set:
+                            has_required_words = True
+                            break
+                    if not has_required_words:
+                        logger.info('Required words not found in selector '
+                                    '(%s). Extraction stopped.' % (key))
+                        return (INVALID_DATA, '')
 
                 # In case of getting image, put the HTML nodes into a list
                 if get_image and data_type == 'html':
@@ -208,13 +229,13 @@ class Extractor(object):
                         images.extend(self.extract_images(element))
                     # Image's src has been modified, so we need to get content
                     # again.
-                    tmp_content = get_content(elements, data_type)
+                    extracted_contents = get_content(elements, data_type)
 
                 # Perfrom replacing in the content
                 if replace_rules:
-                    tmp_content = self.refine_content(
-                        tmp_content, replace_rules=replace_rules)
-                content[key] = tmp_content
+                    extracted_contents = self.refine_content(
+                        extracted_contents, replace_rules=replace_rules)
+                content[key] = extracted_contents
 
         # Preparing output
         return ({
