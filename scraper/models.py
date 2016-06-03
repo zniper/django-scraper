@@ -125,6 +125,34 @@ class Spider(ExtractorMixin, BaseCrawl):
         runner = SpiderRunner(spider=self, task_id=self._task)
         return runner.run()
 
+    def create_result(self, data, task_id=None, local_content=None):
+        """ This will create and return the Result object. It binds with a task ID
+        if provided.
+        Arguments:
+            data - Result data as dict or string value
+            task_id - (optional) ID of related task
+            local_content - (optional) related local content object
+        """
+        # If no task_id (from queuing system) provided, new unique ID
+        # with prefix will be generated and used
+        data = deepcopy(data)
+        # Remove extras's path information from datum since it's should not be
+        # stored in result
+        for datum in data["results"]:
+            if "path" in datum.get("extras", {}):
+                datum["extras"].pop("path")
+        if task_id is None:
+            duplicated = True
+            while duplicated:
+                task_id = NO_TASK_PREFIX + str(uuid.uuid4())
+                if not Result.objects.filter(task_id=task_id).exists():
+                    break
+        res = Result(task_id=task_id, data=data, spider=self)
+        if local_content:
+            res.other = local_content
+        res.save()
+        return res
+
     def _finalize(self, data):
         """Should be called at final step in operate(). This finalizes and
         move collected data to storage if having files downloaded"""
@@ -170,34 +198,6 @@ class Spider(ExtractorMixin, BaseCrawl):
         logger.info('[{0}] Result location: {1}'.format(
             self._task, storage_path))
         return local_content
-
-    def create_result(self, data, task_id=None, local_content=None):
-        """ This will create and return the Result object. It binds with a task ID
-        if provided.
-        Arguments:
-            data - Result data as dict or string value
-            task_id - (optional) ID of related task
-            local_content - (optional) related local content object
-        """
-        # If no task_id (from queuing system) provided, new unique ID
-        # with prefix will be generated and used
-        data = deepcopy(data)
-        # Remove extras's path information from datum since it's should not be
-        # stored in result
-        for datum in data["results"]:
-            if "path" in datum.get("extras", {}):
-                datum["extras"].pop("path")
-        if task_id is None:
-            duplicated = True
-            while duplicated:
-                task_id = NO_TASK_PREFIX + str(uuid.uuid4())
-                if not Result.objects.filter(task_id=task_id).exists():
-                    break
-        res = Result(task_id=task_id, data=data, spider=self)
-        if local_content:
-            res.other = local_content
-        res.save()
-        return res
 
     def __str__(self):
         return _('Spider: {0}').format(self.name)

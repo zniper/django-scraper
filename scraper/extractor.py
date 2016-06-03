@@ -1,3 +1,6 @@
+import hashlib
+import mimetypes
+
 import chardet
 import requests
 import os
@@ -199,16 +202,19 @@ class Extractor(object):
                         # A ROLLBACK CASE SHOULD BE IMPLEMENTED
                         return (None, '')
 
+                # In case of getting image, put the HTML nodes into a list
+                if get_image and data_type == 'html':
+                    for element in elements:
+                        images.extend(self.extract_images(element))
+                    # Image's src has been modified, so we need to get content
+                    # again.
+                    tmp_content = get_content(elements, data_type)
+
                 # Perfrom replacing in the content
                 if replace_rules:
                     tmp_content = self.refine_content(
                         tmp_content, replace_rules=replace_rules)
                 content[key] = tmp_content
-
-                # In case of getting image, put the HTML nodes into a list
-                if get_image and data_type == 'html':
-                    for element in elements:
-                        images.extend(self.extract_images(element))
 
         # Preparing output
         return ({
@@ -238,8 +244,11 @@ class Extractor(object):
         for img in images:
             ipath = img.get('src')
             file_name = self.download_file(ipath)
-            meta = {'caption': img.get('alt', "") or img.get("title", "") or ""}
-            imeta.append((file_name, meta))
+            if file_name:
+                meta = {'caption': img.get('alt', "") or img.get("title", "") or ""}
+                new_ipath = os.path.join(self._uuid, file_name)
+                img.set('src', new_ipath)
+                imeta.append((file_name, meta))
         return imeta
 
     def write_file(self, file_name, content):
@@ -258,10 +267,39 @@ class Extractor(object):
         """ Return full path of file (include containing directory) """
         return join(self._location, os.path.basename(file_name))
 
+    def get_file_name(self, url, response):
+        """
+        Get file's name from given url and http response.
+        Args:
+            url: file's url
+            response: http response after getting the file.
+
+        Returns: an unique file's name that will be used to download file.
+        """
+        last_url_part = url.split('/')[-1].split('?')[0]
+        url_extension = ""
+        if "." in last_url_part:
+            url_extension = "." + last_url_part.split(".")[-1]
+
+        content_type = response.headers.get("Content-Type", "")
+        # Guess file extension from response's content type
+        extensions = mimetypes.guess_all_extensions(content_type)
+        if extensions:
+            if url_extension in extensions:
+                file_extension = url_extension
+            else:
+                file_extension = mimetypes.guess_extension(content_type)
+        else:
+            # If no extensions match with content_type, use url_extension
+            file_extension = url_extension
+        # Generate file_name by hashing source url
+        file_name = hashlib.sha1(url).hexdigest() + file_extension
+        return file_name
+
     def download_file(self, url):
         """ Download file from given url and save to common location """
         file_url = url.strip()
-        file_name = url.split('/')[-1].split('?')[0]
+
         if file_url.lower().find('http://') == -1:
             file_url = urlparse.urljoin(self._url, file_url)
         lives = 3
@@ -270,13 +308,16 @@ class Extractor(object):
                 response = requests.get(file_url, headers=self.headers,
                                         proxies=self.proxies)
                 if response.status_code == 200:
-                    if self.write_file(file_name, response.content):
+                    file_name = self.get_file_name(url, response)
+                    file_path = self.write_file(file_name, response.content)
+                    if file_path:
                         return file_name
                 else:
                     logger.error('Cannot downloading file %s' % url)
             except requests.ConnectionError:
                 logger.info('Retry downloading file: %s' % file_url)
             lives -= 1
+        return ""
 
     def refine_content(self, content, custom_rules=None):
         """ rules should adapt formats:

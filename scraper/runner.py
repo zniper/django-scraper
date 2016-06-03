@@ -13,7 +13,7 @@ from django.utils.encoding import force_text
 
 from scraper.config import TEMP_DIR, INDEX_JSON
 from scraper.extractor import Extractor
-from scraper.utils import download_batch, get_link_info, get_uuid, Datum
+from scraper.utils import download_batch, get_link_info, Datum
 
 logger = logging.getLogger(__name__)
 
@@ -350,7 +350,6 @@ class SpiderRunner(object):
 
         Args:
             urls: urls dictionary in format {url:depth}
-            page_cls: class that used to create page object.
 
         Returns: list of page objects
 
