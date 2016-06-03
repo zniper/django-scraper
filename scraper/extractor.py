@@ -12,7 +12,6 @@ from readability.readability import Document
 from .config import DEFAULT_REPLACE_RULES, custom_loader
 from .utils import complete_url, get_uuid, get_link_info, get_content
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -141,7 +140,7 @@ class Extractor(object):
         selectors.
 
         Arguments
-            selectors - Dictionary of selectors, ex: {'key': 'xpath'}
+            selectors - Dictionary of selectors, ex: {'key': {'xpath':'',..}}
             get_image - Download images if having HTML content
             replace_rules - List of rules for removing useless text data
             black_words - Process will stop if one of these words found
@@ -163,8 +162,14 @@ class Extractor(object):
             if isinstance(selectors[key], basestring):
                 xpath = selectors[key]
                 data_type = 'html'
+                attribute = ""
+            elif isinstance(selectors[key], dict):
+                xpath = selectors[key].get("xpath", "")
+                data_type = selectors[key].get("data_type", "") or "html"
+                attribute = selectors[key].get("attribute", "")
             else:
                 xpath, data_type = selectors[key]
+                attribute = ""
             elements = self.xpath(xpath)
 
             # Different handlers for each data_type value
@@ -178,6 +183,10 @@ class Extractor(object):
                     file_name = self.download_file(url)
                     if file_name:
                         media.append((file_name, description))
+            elif attribute:
+                attrs = [element.get(attribute, "") for element in elements
+                         if element.get(attribute, "")]
+                content[key] = attrs
             else:
                 tmp_content = get_content(elements, data_type)
 
@@ -203,11 +212,11 @@ class Extractor(object):
 
         # Preparing output
         return ({
-            'content': content,
-            'images': images,
-            'media': media,
-            'uuid': self._uuid,
-        }, self.location)
+                    'content': content,
+                    'images': images,
+                    'media': media,
+                    # 'uuid': self._uuid,
+                }, self.location)
 
     def extract_article(self):
         """Returns only readable content
@@ -227,9 +236,9 @@ class Extractor(object):
         images = element.findall('.//img')
         logger.info('Download %d found image(s)' % len(images))
         for img in images:
-            ipath = img.xpath('@src')[0]
+            ipath = img.get('src')
             file_name = self.download_file(ipath)
-            meta = {'caption': ''.join(element.xpath('@alt'))}
+            meta = {'caption': img.get('alt', "") or img.get("title", "") or ""}
             imeta.append((file_name, meta))
         return imeta
 

@@ -31,9 +31,9 @@ class Data(object):
     information"""
 
     def __init__(self, *args, **kwargs):
-        self.uuid = kwargs.get('uuid') or kwargs.get('id')
+        # self.uuid = kwargs.get('uuid') or kwargs.get('id')
         self.task = kwargs.get('task_id')
-        self.url = kwargs.get('url')
+        self.spider = kwargs.get('spider')
         self.start = kwargs.get('start') or datetime.now()
         self.end = kwargs.get('end') or None
         self.results = []
@@ -43,9 +43,9 @@ class Data(object):
         if self.end is None:
             self.end = datetime.now()
         result = {
-            'id': self.uuid,
+            # 'id': self.uuid,
             'task': self.task,
-            'url': self.url,
+            'spider': self.spider,
             'start': print_time(self.start),
             'end': print_time(self.end),
             'results': self.results,

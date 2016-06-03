@@ -1,6 +1,10 @@
 from __future__ import unicode_literals
 
 import uuid
+
+import itertools
+from copy import deepcopy
+
 import os
 import simplejson as json
 import logging
@@ -17,6 +21,7 @@ from django.utils.encoding import force_text
 from django.utils.six import python_2_unicode_compatible
 from django.utils.translation import ugettext_lazy as _
 
+from scraper.runner import SpiderRunner
 from .config import (DATA_TYPES, PROTOCOLS, INDEX_JSON, COMPRESS_RESULT,
                      TEMP_DIR, NO_TASK_PREFIX)
 from .base import BaseCrawl, ExtractorMixin
@@ -24,6 +29,11 @@ from .utils import (
     SimpleArchive, Datum, Data, write_storage_file, move_to_storage,
     download_batch)
 from .signals import post_scrape
+
+try:
+    xrange
+except NameError:
+    xrange = range
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +60,13 @@ class Spider(ExtractorMixin, BaseCrawl):
     _task = None
     _work = None
 
+    def get_root_urls(self):
+        """Returns all root urls."""
+        urls = []
+        for craw_url in self.urls.all():
+            urls = itertools.chain(urls, craw_url.generate_urls())
+        return urls
+
     def operate(self, operations, task_id=None):
         """Performs all given operations on spider URL
         Args:
@@ -61,16 +78,18 @@ class Spider(ExtractorMixin, BaseCrawl):
             task_id - Will be generated if missing
         Returns: Result object
         """
-        self._set_extractor()
+        # self._set_extractor()
         has_files = False
+        if not task_id:
+            task_id = SpiderRunner.generate_task_id()
         self._task = task_id
-        data = Data(url=self.url, uuid=self.extractor._uuid, task_id=task_id)
+        data = Data(spider=self.id, task_id=task_id)
         for operation in operations:
             datum = self._perform(**operation)
             data.add_result(datum)
             if 'path' in datum.extras and not has_files:
                 has_files = True
-        result = create_result(data.dict, self._task)
+        result = self.create_result(data.dict, self._task)
         if has_files:
             result.other = self._finalize(data)
             result.save()
@@ -103,68 +122,23 @@ class Spider(ExtractorMixin, BaseCrawl):
         Returns:
             (result, path) - Result and path to collected content (dir or ZIP)
         """
-        logger.info('[{0}] START CRAWLING: {1}'.format(
-            self._task, self.url))
-
-        # Collect all target links from level 0
-        self.depths = {'target': {}, 'expand': {}}
-        self.crawl_links = {'target': [], 'expand': []}
-        if self.crawl_root:
-            self.crawl_links['target'].append(self.url)
-            self.depths['target'][self.url] = 0
-        self.aggregate_links(self.get_links(self.extractor), 1)
-        logger.info('Found: {0} targets, {1} expansions'.format(
-            len(self.crawl_links['target']), len(self.crawl_links['expand'])))
-
-        combined_json = {}
-        result_paths = []
-        page_sources = {}
-        while self.crawl_links['target'] or self.crawl_links['expand']:
-            # Perform bulk download
-            page_sources.update(download_batch(
-                self.crawl_links['target'] + self.crawl_links['expand']))
-
-            # Collect data and links from targeted links
-            while self.crawl_links['target']:
-                url = self.crawl_links['target'].pop()
-                data = self.process_target(url, page_sources[url])
-                data_id = data.extras['uuid']
-                single_content = {
-                    'content': data.content,
-                    'url': data.extras['url']
-                }
-                combined_json[data_id] = single_content
-                result_paths.append(data.extras['path'])
-            # ... and only links from expand links
-            while self.crawl_links['expand']:
-                url = self.crawl_links['expand'].pop()
-                depth = self.depths['expand'][url]
-                # Is this redundant check?
-                if depth >= self.crawl_depth:
-                    continue
-                # Only extract target & expand links, so collector is not
-                # necessary
-                extr = self._new_extractor(url, page_sources[url])
-                self.aggregate_links(self.get_links(extr), depth + 1)
-
-        # Create the aggregated Result
-        extras = {'path': result_paths}
-        return Datum(content=combined_json, **extras)
+        runner = SpiderRunner(spider=self, task_id=self._task)
+        return runner.run()
 
     def _finalize(self, data):
         """Should be called at final step in operate(). This finalizes and
         move collected data to storage if having files downloaded"""
-        crawl_id = self.extractor._uuid
-        logger.info('[{0}] Finalizing result [{1}]'.format(
-            self._task, crawl_id))
+        logger.info('[{0}] Finalizing result'.format(self._task))
 
         data_paths = []
         for datum in data.results:
             if 'path' in datum.get('extras', {}):
                 data_paths.extend(datum['extras']['path'])
+            if "extras" in datum:
+                datum.pop("extras")
         if COMPRESS_RESULT:
             archive = SimpleArchive(
-                crawl_id + '.zip',
+                self._task + '.zip',
                 join(TEMP_DIR, self.storage_location))
             archive.write(INDEX_JSON, data.json)
             # Collect all content files from operations
@@ -177,77 +151,53 @@ class Spider(ExtractorMixin, BaseCrawl):
             storage_path = archive.move_to_storage(
                 storage, self.storage_location)
         else:
-            storage_path = join(self.storage_location, crawl_id)
+            storage_path = join(self.storage_location, self._task)
             write_storage_file(
                 storage, join(storage_path, 'index.json'), data.json)
             for d_path in data_paths:
                 move_to_storage(storage, d_path, storage_path)
 
         # Assign LocalContent object
-        local_content = LocalContent(url=self.url, local_path=storage_path)
+        local_content = LocalContent(local_path=storage_path)
         local_content.save()
 
         for path in data_paths:
-            try:
-                rmtree(path)
-            except OSError:
-                logger.info('Unable to remove temp dir: {0}'.format(path))
+            if os.path.exists(path):
+                try:
+                    rmtree(path)
+                except OSError:
+                    logger.info('Unable to remove temp dir: {0}'.format(path))
         logger.info('[{0}] Result location: {1}'.format(
             self._task, storage_path))
         return local_content
 
-    def process_target(self, url, source=''):
-        """ Perform collecting data in specific target url
-        Args:
-            content - source of the target page
-        Returns: JSON of collected data
-            {
-                'content':
-                'extras': {
-                    'path':
-                    'target':
-                    'expand':
-                },
-                ...
-            }
+    def create_result(self, data, task_id=None, local_content=None):
+        """ This will create and return the Result object. It binds with a task ID
+        if provided.
+        Arguments:
+            data - Result data as dict or string value
+            task_id - (optional) ID of related task
+            local_content - (optional) related local content object
         """
-        collector = self.collectors.first()
-        collector.extractor = self._new_extractor(url, source)
-        data = collector.get_content(explore={
-            'target': self.target_links,
-            'expand': self.expand_links
-        })
-        # Handle the extracted links (target & expand). Bind those  with the
-        # depth if still in limit
-        data.extras['url'] = url
-        extras = data.extras
-        depth = self.depths['target'][url]
-        if depth < self.crawl_depth:
-            self.aggregate_links({'target': extras['target']}, depth + 1)
-            if depth < self.crawl_depth - 1:
-                self.aggregate_links({'expand': extras['expand']}, depth + 1)
-        return data
-
-    def aggregate_links(self, links, depth):
-        """ Aggregate given links (with target & expand) into
-        self.craw_links """
-        for key in links:
-            if key == 'expand' and depth == self.crawl_depth:
-                continue
-            for url in links[key]:
-                if url in self.depths[key] and self.depths[key][url] <= depth:
-                    continue
-                self.crawl_links[key].append(url)
-                self.depths[key][url] = depth
-
-    def get_links(self, extractor):
-        """ Return target and expand links of current extractor """
-        links = {}
-        for key in ('target', 'expand'):
-            urls = [_['url'] for _ in extractor.extract_links(
-                xpaths=getattr(self, key + '_links'))]
-            links[key] = urls
-        return links
+        # If no task_id (from queuing system) provided, new unique ID
+        # with prefix will be generated and used
+        data = deepcopy(data)
+        # Remove extras's path information from datum since it's should not be
+        # stored in result
+        for datum in data["results"]:
+            if "path" in datum.get("extras", {}):
+                datum["extras"].pop("path")
+        if task_id is None:
+            duplicated = True
+            while duplicated:
+                task_id = NO_TASK_PREFIX + str(uuid.uuid4())
+                if not Result.objects.filter(task_id=task_id).exists():
+                    break
+        res = Result(task_id=task_id, data=data, spider=self)
+        if local_content:
+            res.other = local_content
+        res.save()
+        return res
 
     def __str__(self):
         return _('Spider: {0}').format(self.name)
@@ -274,6 +224,21 @@ class CrawlUrl(models.Model):
 
     def __str__(self):
         return self.base
+
+    def generate_urls(self):
+        """Generate crawling urls from base & patterns."""
+        urls = []
+        if "{0}" in self.base:
+            if self.number_pattern:
+                number_urls = (self.base.format(idx) for idx in
+                               xrange(*self.number_pattern))
+                urls = itertools.chain(urls, number_urls)
+            if self.text_pattern:
+                text_urls = (self.base.format(item) for item in
+                             self.text_pattern)
+                urls = itertools.chain(urls, text_urls)
+            return urls
+        return [self.base]
 
 
 @python_2_unicode_compatible
@@ -331,41 +296,12 @@ class Collector(ExtractorMixin, models.Model):
     def get_article(self, **kwargs):
         return Datum(content=self.extractor.extract_article())
 
-    def get_content(self, explore=None, **kwargs):
-        """ Extract content of a page specified by URL, using linked selectors
-        Args:
-            explore - A dict, for retrieving inclusive target and expand links
-                {'target': ['//a'], 'expand': ['//div/a']}
-        Returns:
-            Datum object
-        """
-        data, result_path = self.extractor.extract_content(
-            get_image=self.get_image,
-            selectors=self.selector_dict,
-            replace_rules=self.replace_rules,
-        )
-        if not os.path.exists(result_path):
-            os.makedirs(result_path)
-        with open(join(result_path, INDEX_JSON), 'w') as index_file:
-            index_file.write(json.dumps(data))
-        extras = {'path': result_path}
-        if explore:
-            # In case of having exploring rules, additional information
-            # like other target/expand links will also be collected
-            for rule in explore.keys():
-                extras[rule] = []
-                for link in self.extractor.extract_links(explore[rule]):
-                    extras[rule].append(link['url'])
-            extras['uuid'] = self.extractor._uuid
-        data.update(extras)
-        return Datum(**data)
-
     @property
     def selector_dict(self):
         """Convert the self.selectors into dict of XPaths"""
         data_xpaths = {}
         for sel in self.selectors.all():
-            data_xpaths[sel.key] = (sel.xpath, sel.data_type)
+            data_xpaths[sel.key] = sel.to_dict()
         return data_xpaths
 
 
@@ -395,6 +331,16 @@ class Selector(models.Model):
 
     def __str__(self):
         return _('Selector: {0}').format(self.key)
+
+    def to_dict(self):
+        return {
+            "key": self.key,
+            "xpath": self.xpath,
+            "attribute": self.attribute,
+            "data_type": self.data_type,
+            "required_words": self.required_words,
+            "black_words": self.black_words
+        }
 
 
 @python_2_unicode_compatible
@@ -428,42 +374,19 @@ class Result(models.Model):
         return self.data
 
 
-def create_result(data, task_id=None, local_content=None):
-    """ This will create and return the Result object. It binds with a task ID
-    if provided.
-    Arguments:
-        data - Result data as dict or string value
-        task_id - (optional) ID of related task
-        local_content - (optional) related local content object
-    """
-    # If no task_id (from queuing system) provided, new unique ID
-    # with prefix will be generated and used
-    if task_id is None:
-        duplicated = True
-        while duplicated:
-            task_id = NO_TASK_PREFIX + str(uuid.uuid4())
-            if not Result.objects.filter(task_id=task_id).exists():
-                break
-    res = Result(task_id=task_id, data=data)
-    if local_content:
-        res.other = local_content
-    res.save()
-    return res
-
-
 @python_2_unicode_compatible
 class LocalContent(models.Model):
     """ Store scrapped content in local, this could be used to prevent
         redownloading
     """
-    url = models.CharField(max_length=256)
     local_path = models.CharField(max_length=256)
     created_time = models.DateTimeField(
         default=datetime.now, blank=True, null=True)
     state = models.IntegerField(default=0)
 
     def __str__(self):
-        return _('Content (at {0}) of: {1}').format(self.created_time, self.url)
+        return _('Content (at {0}) of: {1}').format(self.created_time,
+                                                    self.result_set.first())
 
     def remove_files(self):
         """Remove all files in storage of this LocalContent instance"""
