@@ -1,5 +1,6 @@
 import hashlib
 import mimetypes
+from copy import deepcopy
 
 import chardet
 import requests
@@ -137,7 +138,8 @@ class Extractor(object):
         found_links.sort()
         return found_links
 
-    def extract_content(self, selectors={}, get_image=True, replace_rules=[]):
+    def extract_content(self, selectors={}, get_image=True, replace_rules=[],
+                        deferred_download=False):
         """ Extract the content from current extractor page following rules in
         selectors.
 
@@ -159,6 +161,7 @@ class Extractor(object):
         content = {}
         media = []
         images = []
+        deferred_info = {"media": {}, "images": {}}
         for key in selectors:
             if isinstance(selectors[key], basestring):
                 xpath = selectors[key]
@@ -187,11 +190,18 @@ class Extractor(object):
                     # The element must be string to downloadable target
                     if not (isinstance(url, basestring) and url.strip()):
                         continue
-                    logger.info('Download media object: {0}'.format(url))
-                    description = ''
-                    file_name = self.download_file(url)
-                    if file_name:
-                        media.append((file_name, description))
+                    if not deferred_download:
+                        logger.info('Download media object: {0}'.format(url))
+                        description = ''
+                        file_name = self.download_file(url)
+                        if file_name:
+                            media.append((file_name, description))
+                    else:
+                        # If deferred_download, add file's url to
+                        # deferred_download's media list.
+                        if key not in deferred_info["media"]:
+                            deferred_info["media"][key] = []
+                        deferred_info["media"][key].append(url)
             else:
                 black_words = selectors[key].get("black_words", []) or []
                 required_words = selectors[key].get("required_words", []) or []
@@ -225,11 +235,19 @@ class Extractor(object):
 
                 # In case of getting image, put the HTML nodes into a list
                 if get_image and data_type == 'html':
-                    for element in elements:
-                        images.extend(self.extract_images(element))
-                    # Image's src has been modified, so we need to get content
-                    # again.
-                    extracted_contents = get_content(elements, data_type)
+                    if not deferred_download:
+                        for element in elements:
+                            images.extend(self.extract_images(element))
+                        # Image's src has been modified, so we need to get content
+                        # again.
+                        extracted_contents = get_content(elements, data_type)
+                    else:
+                        # If deferred_download, add file's url to
+                        # deferred_download's media list.
+                        deferred_info["images"][key] = {
+                            "elements": deepcopy(elements),
+                            "data_type": data_type
+                        }
 
                 # Perfrom replacing in the content
                 if replace_rules:
@@ -238,12 +256,12 @@ class Extractor(object):
                 content[key] = extracted_contents
 
         # Preparing output
-        return ({
-                    'content': content,
-                    'images': images,
-                    'media': media,
-                    # 'uuid': self._uuid,
-                }, self.location)
+        result = {'content': content,
+                  'images': images,
+                  'media': media}
+        if deferred_download:
+            result["deferred_info"] = deferred_info
+        return (result, self.location)
 
     def extract_article(self):
         """Returns only readable content
@@ -266,7 +284,8 @@ class Extractor(object):
             ipath = img.get('src')
             file_name = self.download_file(ipath)
             if file_name:
-                meta = {'caption': img.get('alt', "") or img.get("title", "") or ""}
+                meta = {
+                    'caption': img.get('alt', "") or img.get("title", "") or ""}
                 new_ipath = os.path.join(self._uuid, file_name)
                 img.set('src', new_ipath)
                 imeta.append((file_name, meta))

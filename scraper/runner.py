@@ -13,7 +13,7 @@ from django.utils.encoding import force_text
 
 from scraper.config import TEMP_DIR, INDEX_JSON, INVALID_DATA
 from scraper.extractor import Extractor
-from scraper.utils import download_batch, get_link_info, Datum
+from scraper.utils import download_batch, get_link_info, Datum, get_content
 
 logger = logging.getLogger(__name__)
 
@@ -79,8 +79,9 @@ class ListingPage(Page):
         # Init list of results
         data = {}
         new_links = set()
+        # Find collector information for each data item and detail links.
         for data_item in data_items:
-            data[data_item.name] = self.find_data_item(data_item)
+            data[data_item.name] = self.find_items_for(data_item)
             for item in data[data_item.name]:
                 for collector in item["collectors"]:
                     for link in collector["links"]:
@@ -89,45 +90,13 @@ class ListingPage(Page):
         # Download new links
         logger.info("Start download detail links...")
         page_sources = download_batch(new_links)
-        # Create DetailPages and extract data from them.
+        # Extract data for all found items of all data_items
         for data_item in data_items:
             for item in data[data_item.name]:
-                is_invalid = False
-                for collector in item["collectors"]:
-                    # Create detailed pages for downloaded link.
-                    for link in collector["links"]:
-                        if link in page_sources:
-                            collector["pages"].append(
-                                DetailedPage(
-                                    runner=self.runner,
-                                    url=link,
-                                    depth=self.depth + 1,
-                                    source=page_sources[link],
-                                    parent=self,
-                                    collector=collector["collector"]
-                                )
-                            )
-                    # Extract data from detailed pages.
-                    for page in collector["pages"]:
-                        page_data, page_expand_links = page.extract_data()
-                        # Aggregate expand links
-                        for link in page_expand_links:
-                            if link not in expand_links:
-                                expand_links[link] = page.depth + 1
-                        # Check if page contains invalid data or not.
-                        if page_data == INVALID_DATA:
-                            # Cancel the collector because some fields has
-                            # invalid information.
-                            item["data"] = {}
-                            is_invalid = True
-                            break
-                        # Merge page's data to item's data
-                        item["data"] = self.merge_data(
-                            item["data"], page_data)
-                    if is_invalid:
-                        # Break the collector loop because one of collector has
-                        # invalid data
-                        break
+                valid = self.extract_item_data(item, page_sources, expand_links)
+                if valid and item["data"] and \
+                        item["data"].get("deferred_info", None):
+                    self.download_deferred_info(item)
         # Filter empty results
         for item_name in data:
             data[item_name] = [item["data"] for item in data[item_name]
@@ -137,7 +106,101 @@ class ListingPage(Page):
         # Returns crawled data and found expand_links
         return data, expand_links
 
-    def find_data_item(self, data_item):
+    def download_deferred_info(self, item):
+        """
+        Download item's images & binaries. Downloaded results will also be
+        updated to item's data.
+
+        Args:
+            item: item's current information in format:
+                {'data': {}, 'collectors': [list_of_collectors]}
+
+        Returns: updated item.
+        """
+        logger.info("Start downloading deferred items...")
+        deferred_info = item["data"]["deferred_info"]
+        # Download binary files
+        for field_name, urls in deferred_info["media"].items():
+            paths = []
+            for url in urls:
+                file_name = self.extractor.download_file(url)
+                paths.append(os.path.join(self.extractor._uuid, file_name))
+            item["data"]["content"][field_name] = paths
+            item["data"]["media"].extend(paths)
+        # Download images
+        for field_name, images_info in deferred_info["images"].items():
+            elements = images_info["elements"]
+            for element in elements:
+                item["data"]["images"].extend(
+                    self.extractor.extract_images(element)
+                )
+            # Get new content for item's field data after downloading.
+            item["data"]["content"][field_name] = get_content(
+                elements, images_info["data_type"]
+            )
+        # Removed deffered info from item
+        item["data"].pop("deferred_info")
+        return item
+
+    def extract_item_data(self, item, page_sources, expand_links):
+        """
+        Extract item's data from item's collectors, downloaded page_sources and
+        also update expand_links if found new ones.
+
+        item's data will also be validated and updated while extracting.
+
+        Args:
+            item: item's curernt information. In format:
+                {'data': {}, 'collectors': [list_of_collectors]}
+            page_sources: downloaded page sources for all item's related links.
+            expand_links: dictionary of expand links that found while extracting
+            current listing page, in format:
+                {url: depth}
+
+        Returns: True if item is valid, if not returns False.
+        """
+        is_invalid = False
+        for collector in item["collectors"]:
+            # Create detailed pages for collector links.
+            for link in collector["links"]:
+                if link in page_sources:
+                    collector["pages"].append(
+                        DetailedPage(
+                            runner=self.runner,
+                            url=link,
+                            depth=self.depth + 1,
+                            source=page_sources[link],
+                            parent=self,
+                            collector=collector["collector"]
+                        )
+                    )
+            # Extract data from detailed pages.
+            for page in collector["pages"]:
+                # TODO: Defer the download to wait for item's validation result.
+                page_data, page_expand_links = page.extract_data(
+                    deferred_download=True
+                )
+                # Aggregate expand links
+                for link in page_expand_links:
+                    if link not in expand_links:
+                        expand_links[link] = page.depth + 1
+                # Check if page contains invalid data or not.
+                if page_data == INVALID_DATA:
+                    # Cancel the collector because some fields has
+                    # invalid information.
+                    item["data"] = {}
+                    is_invalid = True
+                    break
+                # Merge page's data to item's data
+                item["data"] = self.merge_data(
+                    item["data"], page_data)
+            if is_invalid:
+                # Break the collector loop because one of collector has
+                # invalid data
+                break
+        return not is_invalid
+
+    def find_items_for(self, data_item):
         """
         Find and collect information of all matched data_item in page.
 
@@ -253,7 +316,7 @@ class ListingPage(Page):
             if isinstance(item[key], dict):
                 if not key in result:
                     result[key] = {}
-                result[key].update(item[key])
+                self.merge_data(result[key], item[key])
             elif isinstance(item[key], list):
                 if not key in result:
                     result[key] = []
@@ -289,8 +352,19 @@ class DetailedPage(Page):
             self.extractor._uuid = self.parent.extractor._uuid
             self.extractor._location = self.parent.extractor._location
 
-    def extract_data(self):
-        """Extract data from page."""
+    def extract_data(self, deferred_download=True):
+        """
+        Extract data from page.
+        Args:
+            deferred_download: if True, media and binaries will not be
+            downloaded.
+
+        Returns: extracted data, expand_links. E.g:
+            {'content': {...},
+             'images': images,
+             'media': media,},
+             ['expand_link1', 'expand_link2',...]
+        """
         logger.info("Start extracting detailed page {0}".format(self.url))
 
         # Find expand links
@@ -302,6 +376,7 @@ class DetailedPage(Page):
             get_image=self.collector.get_image,
             selectors=selector_dict,
             replace_rules=self.collector.replace_rules,
+            deferred_download=True
         )
         if data == INVALID_DATA:
             # The data item is invalid
