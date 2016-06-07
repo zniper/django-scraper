@@ -1,0 +1,11 @@
+[
+{
+    "model": "scraper.dataitem",
+    "pk": 1,
+    "fields": {
+        "name": "BlogPost",
+        "base": "//*[@id=\"main\"]/article",
+        "spider": 1
+    }
+}
+]

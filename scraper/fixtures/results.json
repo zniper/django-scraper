@@ -1,0 +1,48 @@
+[
+{
+    "model": "scraper.result",
+    "pk": 1,
+    "fields": {
+        "task_id": "c1e26d8e-2e75-4377-991e-c1df346e5b11",
+        "data": {
+            "start": "2016/06/07 15:03:12",
+            "task": "c1e26d8e-2e75-4377-991e-c1df346e5b11",
+            "end": "2016/06/07 15:03:19",
+            "spider": 1,
+            "results": [
+                {
+                    "content": {
+                        "BlogPost": [
+                            {
+                                "content": {
+                                    "url": [
+                                        "http://blog.ycombinator.com/welcome-adora-nicole-elizabeth-case-and-robby"
+                                    ],
+                                    "content": [
+                                        "<div class=\"post-body\" id=\"post_body_1058907\">\n    \n      <p>We're excited to announce a few new additions to the YC team.\u00a0</p>Adora Cheung is joining YC as a Partner. Previously, she was co-founder and CEO at Homejoy and a product manager at Slide. Adora has a masters in economics from University of Rochester and a bachelors in computer science from Clemson.\u00a0<br/><br/>Nicole Imhof is joining YC as my Executive Assistant. Prior to YC, Nicole was an Operations Associate at the Berkeley Endowment Management Company and previously, she was at ICONIQ Capital.\u00a0Imhof\u00a0earned her B.A. in Politics from the University of San Francisco.<div/><div><br/></div><div>Elizabeth Proehl is joining YC Research to manage the office and general operations. Most recently, Elizabeth worked as a public radio producer and reporter at KPFA in Berkeley, California. She has a BA in Near Eastern Studies and Psychology from Cornell.<div><br/></div>\n<div>Case Sandberg is joining YC's software team. Previously, he was an early employee at both Respondly and Borrowlenses (with exits at Buffer and Shutterfly, respectively). Case is a high-school dropout.</div>\n<div><br/></div>\n<div>Robby Walker is joining YC as a part-time partner and will lead YC's non-profit program. Robby previously founded two companies funded by Y Combinator: Zenter (W2007) and Cue (W2010). He now works on Siri at Apple.</div>\n<div><br/></div>\n<div>Welcome\u00a0to YC!\u00a0<br/>\n</div>\n</div>\n    \n  </div>"
+                                    ],
+                                    "author": [
+                                        "Sam Altman"
+                                    ],
+                                    "title": [
+                                        "Welcome Adora, Nicole, Elizabeth, Case and Robby!"
+                                    ]
+                                },
+                                "images": [],
+                                "media": []
+                            }
+                        ]
+                    },
+                    "media": [],
+                    "images": [],
+                    "extras": {
+                        "action": "crawl",
+                        "target": "content"
+                    }
+                }
+            ]
+        },
+        "spider": 1
+    }
+}
+]

@@ -1,0 +1,54 @@
+[
+{
+    "model": "scraper.selector",
+    "pk": 1,
+    "fields": {
+        "key": "title",
+        "xpath": ".//header/div/h2/a",
+        "attribute": "",
+        "data_type": "text",
+        "required_words": null,
+        "black_words": null,
+        "collector": 1
+    }
+},
+{
+    "model": "scraper.selector",
+    "pk": 2,
+    "fields": {
+        "key": "url",
+        "xpath": ".//header/div/h2/a",
+        "attribute": "href",
+        "data_type": "text",
+        "required_words": null,
+        "black_words": null,
+        "collector": 1
+    }
+},
+{
+    "model": "scraper.selector",
+    "pk": 3,
+    "fields": {
+        "key": "content",
+        "xpath": ".//div[@class=\"post-body\"]",
+        "attribute": "",
+        "data_type": "html",
+        "required_words": null,
+        "black_words": null,
+        "collector": 1
+    }
+},
+{
+    "model": "scraper.selector",
+    "pk": 4,
+    "fields": {
+        "key": "author",
+        "xpath": ".//footer/span/a[2]",
+        "attribute": "",
+        "data_type": "text",
+        "required_words": null,
+        "black_words": null,
+        "collector": 1
+    }
+}
+]

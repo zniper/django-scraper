@@ -1,0 +1,12 @@
+[
+{
+    "model": "scraper.collector",
+    "pk": 1,
+    "fields": {
+        "link": "",
+        "get_image": true,
+        "replace_rules": null,
+        "data_item": 1
+    }
+}
+]

@@ -259,7 +259,7 @@ class DataItem(models.Model):
 
 
 @python_2_unicode_compatible
-class Collector(ExtractorMixin, models.Model):
+class Collector(models.Model):
     """This could be a single site or part of a site which contains wanted
     content"""
     # name = models.CharField(max_length=256)
@@ -286,15 +286,6 @@ class Collector(ExtractorMixin, models.Model):
     def __str__(self):
         return _('Collector: {0}-{1}').format(force_text(self.data_item),
                                               self.link)
-
-    def get_page(self, **kwargs):
-        return Datum(content=self.extractor._html)
-
-    def get_links(self, **kwargs):
-        return Datum(content=self.extractor.extract_links())
-
-    def get_article(self, **kwargs):
-        return Datum(content=self.extractor.extract_article())
 
     @property
     def selector_dict(self):
@@ -364,15 +355,13 @@ class Result(models.Model):
         """Return self.data. If clean is True, only data content will be
         returned (time, url, ID,... will be excluded)."""
         if clean:
-            content = []
+            content = {}
             for result in self.data['results']:
-                action = result['extras']['action']
-                res_content = result['content']
-                if action == 'crawl':
-                    items = [v['content'] for v in res_content.values()]
-                else:
-                    items = res_content
-                content.extend(items)
+                data_items = result['content']
+                for data_item, items_list in data_items.items():
+                    if data_item not in content:
+                        content[data_item] = []
+                    content[data_item].extend(items_list)
             return content
         return self.data
 
