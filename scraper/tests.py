@@ -155,7 +155,7 @@ class ExtractorLocalTests(TestCase):
     def test_download_file(self):
         FILE_URL = DATA_URL + 'simple_page.txt'
         file_name = self.extractor.download_file(FILE_URL)
-        self.assertEqual(file_name, 'simple_page.txt')
+        self.assertTrue(file_name.endswith(".txt"))
 
     def test_download_file_failed(self):
         FILE_URL = DATA_URL + 'not_exist.txt'

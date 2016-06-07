@@ -321,7 +321,7 @@ class Extractor(object):
         if "." in last_url_part:
             url_extension = "." + last_url_part.split(".")[-1]
 
-        content_type = response.headers.get("Content-Type", "")
+        content_type = response.headers.get("Content-Type", "").split(";")[0]
         # Guess file extension from response's content type
         extensions = mimetypes.guess_all_extensions(content_type)
         if extensions:
@@ -357,7 +357,7 @@ class Extractor(object):
             except requests.ConnectionError:
                 logger.info('Retry downloading file: %s' % file_url)
             lives -= 1
-        return ""
+        return None
 
     def refine_content(self, content, custom_rules=None):
         """ rules should adapt formats:

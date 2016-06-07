@@ -71,7 +71,7 @@ class ListingPage(Page):
         """
         logger.info("Start extracting listing page %s..." % self.url)
         # Find expand links
-        expand_links = self.find_expand_links()
+        self.expand_links = self.find_expand_links()
 
         # Get list of DataItem that need to be crawled.
         data_items = self.spider.data_items.all()
@@ -93,7 +93,7 @@ class ListingPage(Page):
         # Extract data for all found items of all data_items
         for data_item in data_items:
             for item in data[data_item.name]:
-                valid = self.extract_item_data(item, page_sources, expand_links)
+                valid = self.extract_item_data(item, page_sources)
                 if valid and item["data"] and \
                         item["data"].get("deferred_info", None):
                     self.download_deferred_info(item)
@@ -104,7 +104,7 @@ class ListingPage(Page):
         # Write index.json file
         self.write_index(data)
         # Returns crawled data and found expand_links
-        return data, expand_links
+        return data, self.expand_links
 
     def download_deferred_info(self, item):
         """
@@ -142,7 +142,7 @@ class ListingPage(Page):
         item["data"].pop("deferred_info")
         return item
 
-    def extract_item_data(self, item, page_sources, expand_links):
+    def extract_item_data(self, item, page_sources):
         """
         Extract item's data from item's collectors, downloaded page_sources and
         also update expand_links if found new ones.
@@ -153,7 +153,6 @@ class ListingPage(Page):
             item: item's curernt information. In format:
                 {'data': {}, 'collectors': [list_of_collectors]}
             page_sources: downloaded page sources for all item's related links.
-            expand_links: dictionary of expand links that found while extracting
             current listing page, in format:
                 {url: depth}
 
@@ -176,14 +175,10 @@ class ListingPage(Page):
                     )
             # Extract data from detailed pages.
             for page in collector["pages"]:
-                # TODO: Defer the download to wait for item's validation result.
                 page_data, page_expand_links = page.extract_data(
                     deferred_download=True
                 )
-                # Aggregate expand links
-                for link in page_expand_links:
-                    if link not in expand_links:
-                        expand_links[link] = page.depth + 1
+                self.aggregate_links(page_expand_links, page.depth)
                 # Check if page contains invalid data or not.
                 if page_data == INVALID_DATA:
                     # Cancel the collector because some fields has
@@ -192,13 +187,27 @@ class ListingPage(Page):
                     is_invalid = True
                     break
                 # Merge page's data to item's data
-                item["data"] = self.merge_data(
-                    item["data"], page_data)
+                item["data"] = self.merge_data(item["data"], page_data)
             if is_invalid:
                 # Break the collector loop because one of collector has
                 # invalid data
                 break
         return not is_invalid
+
+    def aggregate_links(self, new_links, depth):
+        """
+        Aggregate current expand links with new ones.
+
+        Args:
+            new_links: a dictionary of links in format {link:depth}
+            depth: current depth of the page where new_links come from.
+
+        Returns:
+
+        """
+        for link in new_links:
+            if link not in self.expand_links:
+                self.expand_links[link] = depth + 1
 
     def find_items_for(self, data_item):
         """
@@ -301,7 +310,7 @@ class ListingPage(Page):
 
     def merge_data(self, result, item):
         """
-        Merge item into result
+        Merge item into result recursively.
 
         Args:
             result: dictionary that store result
@@ -331,7 +340,6 @@ class ListingPage(Page):
         if not os.path.exists(result_path):
             os.makedirs(result_path)
         file_path = os.path.join(result_path, INDEX_JSON)
-        logger.info("Writing index file for listing page: %s" % file_path)
         with open(file_path, 'w') as index_file:
             index_file.write(json.dumps({
                 "url": self.url,
@@ -381,15 +389,27 @@ class DetailedPage(Page):
         if data == INVALID_DATA:
             # The data item is invalid
             return data, expand_links
-        # only return data if it's not empty
-        is_empty = True
-        for key in selector_dict:
-            if data["content"].get(key):
-                is_empty = False
-                break
-        if is_empty and not data["images"] and not data["media"]:
+        # Only return data if it's not empty
+        if self.is_empty_data(data) and not data["images"] \
+                and not data["media"]:
             return None, expand_links
         return data, expand_links
+
+    def is_empty_data(self, data):
+        """
+        Check if given data's content is empty or not.
+
+        Args:
+            data: extracted data that returned by extractor
+
+        Returns: True if data is empty, False if not.
+        """
+        is_empty = True
+        for key in data["content"]:
+            if data["content"][key]:
+                is_empty = False
+                break
+        return is_empty
 
 
 class SpiderRunner(object):
@@ -427,17 +447,19 @@ class SpiderRunner(object):
             for page in self.pages:
                 data_dirs.append(page.extractor.location)
                 page_data, expand_links = page.extract_data()
-                # Combine current data with page's data
-                for item_name in page_data:
-                    if item_name not in data:
-                        data[item_name] = []
-                    data[item_name] += page_data[item_name]
+                self.combine_data(data, page_data)
                 # Aggregate links
                 for link in expand_links:
                     if link not in self.urls:
                         self.urls[link] = expand_links[link]
-
         return Datum(content=data, path=data_dirs)
+
+    def combine_data(self, data, page_data):
+        """Combine current data with page's data."""
+        for item_name in page_data:
+            if item_name not in data:
+                data[item_name] = []
+            data[item_name] += page_data[item_name]
 
     def download_pages(self, urls):
         """
