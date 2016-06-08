@@ -1,17 +1,14 @@
 from __future__ import unicode_literals
-
-import uuid
-
-import itertools
 from copy import deepcopy
-
-import os
-import simplejson as json
-import logging
-from datetime import datetime
 from os.path import join
 from jsonfield.fields import JSONField
 from shutil import rmtree
+
+import uuid
+import urlparse
+import itertools
+import os
+import logging
 
 from django.core.files.storage import default_storage as storage
 from django.db import models
@@ -20,16 +17,15 @@ from django.dispatch.dispatcher import receiver
 from django.utils.encoding import force_text
 from django.utils.six import python_2_unicode_compatible
 from django.utils.translation import ugettext_lazy as _
+from django.utils.timezone import now
 
 from scraper.runner import SpiderRunner
 from .config import (DATA_TYPES, PROTOCOLS, INDEX_JSON, COMPRESS_RESULT,
-                     TEMP_DIR, NO_TASK_PREFIX)
-from .base import BaseCrawl, ExtractorMixin
-from .utils import (
-    SimpleArchive, Datum, Data, write_storage_file, move_to_storage,
-    download_batch)
+                     TEMP_DIR, NO_TASK_PREFIX, CRAWL_ROOT)
+from .mixins import ExtractorMixin
+from .utils import SimpleArchive, Data, write_storage_file, move_to_storage
 from .signals import post_scrape
-
+from .extractor import Extractor
 try:
     xrange
 except NameError:
@@ -39,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 
 @python_2_unicode_compatible
-class Spider(ExtractorMixin, BaseCrawl):
+class Spider(ExtractorMixin, models.Model):
     """ This does work of collecting wanted pages' address, it will auto jump
     to another page and continue finding."""
     name = models.CharField(max_length=256, blank=True, null=True)
@@ -54,11 +50,44 @@ class Spider(ExtractorMixin, BaseCrawl):
         verbose_name=_("Headers"),
         help_text=_("Define custom headers when download pages."),
         null=True, blank=True)
-
+    proxy = models.ForeignKey(
+        'ProxyServer', blank=True, null=True, on_delete=models.PROTECT)
     depths = None
     crawl_links = None
+    _storage_location = None
     _task = None
     _work = None
+
+    @property
+    def storage_location(self):
+        """docstring for storage_location"""
+        if not self._storage_location:
+            self._storage_location = os.path.join(
+                CRAWL_ROOT, now().strftime('%Y/%m/%d'))
+        return self._storage_location
+
+    def get_proxy(self):
+        return self.proxy.get_dict() if self.proxy else None
+
+    def get_ua(self):
+        return self.user_agent.value if self.user_agent else None
+
+    def _new_extractor(self, url, source=''):
+        """Return Extractor instance with given URL. If URL invalid, None will be
+        returned"""
+        splitted_url = urlparse.urlsplit(url)
+        if splitted_url.scheme and splitted_url.netloc:
+            extractor = Extractor(
+                url,
+                base_dir=os.path.join(TEMP_DIR, self.storage_location),
+                proxies=self.get_proxy(),
+                user_agent=self.get_ua(),
+                html=source
+            )
+            return extractor
+        else:
+            logger.error('Cannot get Extractor due to invalid URL: {0}'.format(
+                url))
 
     def get_root_urls(self):
         """Returns all root urls."""
@@ -247,10 +276,11 @@ class DataItem(models.Model):
     name = models.CharField(max_length=50, verbose_name=_("Name"),
                             help_text=_("Data's name. E.g: Article, News, "
                                         "Video, etc..."))
-    base = models.CharField(max_length=512, verbose_name=_("Base XPath"),
-                            help_text=_("Base XPath to target's data container "
-                                        "in page. Empty means whole document."),
-                            null=True, blank=True)
+    base = models.CharField(
+        max_length=512, verbose_name=_("Base XPath"),
+        help_text=_("Base XPath to target's data container in page. Empty "
+                    "means whole document."),
+        null=True, blank=True)
     spider = models.ForeignKey(Spider, verbose_name=_("Spider"),
                                related_name="data_items")
 
@@ -304,7 +334,8 @@ class Selector(models.Model):
     attribute = models.CharField(
         max_length=50, verbose_name=_("Attribute"),
         help_text=_("Name of element's attribute. If given, element's "
-                    "attribute will be returned instead of element's content."),
+                    "attribute will be returned instead of element's "
+                    "content."),
         null=True, blank=True)
     data_type = models.CharField(max_length=64, choices=DATA_TYPES)
     required_words = JSONField(verbose_name=_("Required words"),
@@ -373,7 +404,7 @@ class LocalContent(models.Model):
     """
     local_path = models.CharField(max_length=256)
     created_time = models.DateTimeField(
-        default=datetime.now, blank=True, null=True)
+        auto_now_add=True, blank=True, null=True)
     state = models.IntegerField(default=0)
 
     def __str__(self):
