@@ -20,8 +20,9 @@ from django.utils.translation import ugettext_lazy as _
 from django.utils.timezone import now
 
 from scraper.runner import SpiderRunner
-from .config import (DATA_TYPES, PROTOCOLS, INDEX_JSON, COMPRESS_RESULT,
-                     TEMP_DIR, NO_TASK_PREFIX, CRAWL_ROOT)
+from .config import (
+    DATA_TYPES, PROTOCOLS, INDEX_JSON, COMPRESS_RESULT, TEMP_DIR,
+    NO_TASK_PREFIX, CRAWL_ROOT, WORK_MODE_CHOICES, MODE_CRAWL)
 from .mixins import ExtractorMixin
 from .utils import SimpleArchive, Data, write_storage_file, move_to_storage
 from .signals import post_scrape
@@ -39,6 +40,8 @@ class Spider(ExtractorMixin, models.Model):
     """ This does work of collecting wanted pages' address, it will auto jump
     to another page and continue finding."""
     name = models.CharField(max_length=256, blank=True, null=True)
+    mode = models.CharField(
+        max_length=32, choices=WORK_MODE_CHOICES, default=MODE_CRAWL)
     # Link to different pages, all are XPath
     expand_links = JSONField(
         help_text=_('List of links (as XPaths) to other pages holding target '
@@ -50,10 +53,10 @@ class Spider(ExtractorMixin, models.Model):
         verbose_name=_("Headers"),
         help_text=_("Define custom headers when download pages."),
         null=True, blank=True)
-    proxy = models.ForeignKey(
-        'ProxyServer', blank=True, null=True, on_delete=models.PROTECT)
+    proxies = models.ManyToManyField(
+        'ProxyServer', verbose_name=_("proxy servers"), blank=True)
+
     depths = None
-    crawl_links = None
     _storage_location = None
     _task = None
     _work = None
@@ -70,7 +73,7 @@ class Spider(ExtractorMixin, models.Model):
         return self.proxy.get_dict() if self.proxy else None
 
     def get_ua(self):
-        return self.user_agent.value if self.user_agent else None
+        return self.headers.get('user-agent')
 
     def _new_extractor(self, url, source=''):
         """Return Extractor instance with given URL. If URL invalid, None will be
@@ -96,42 +99,27 @@ class Spider(ExtractorMixin, models.Model):
             urls = itertools.chain(urls, craw_url.generate_urls())
         return urls
 
-    def operate(self, operations, task_id=None):
-        """Performs all given operations on spider URL
+    def start(self, request, task_id=None):
+        """Official entry point of the spider, accepts request as argument.
         Args:
-            operations - [
-                {'action': 'get', 'target': 'content'},
-                {'action': 'get', 'target': 'links'}
-                ...
-                ]
-            task_id - Will be generated if missing
-        Returns: Result object
+            request - JSON data with all needed information
+            task_id - ID of task, mostly comes from queuing system
+        Returns:
+            Result object
         """
-        # self._set_extractor()
-        has_files = False
-        if not task_id:
-            task_id = SpiderRunner.generate_task_id()
-        self._task = task_id
+        self._task = task_id = task_id or SpiderRunner.generate_task_id()
         data = Data(spider=self.id, task_id=task_id)
-        for operation in operations:
-            datum = self._perform(**operation)
-            data.add_result(datum)
-            if 'path' in datum.extras and not has_files:
-                has_files = True
+
+        datum = self._perform(**request)
         result = self.create_result(data.dict, self._task)
-        if has_files:
+        if 'path' in datum.extras:
             result.other = self._finalize(data)
             result.save()
         return result
 
     def _perform(self, action, target, **kwargs):
-        """Perform operation based on given parameters. At the moment, only
-        one collector is supported"""
-        if action == 'get':
-            operator = self.collectors.first()
-            operator.extractor = self.extractor
-        else:
-            operator = self
+        """Perform operation based on given parameters."""
+        operator = self
         method = getattr(operator, action + '_' + target)
         data = method(**kwargs)
         data.extras['action'] = action
@@ -273,9 +261,9 @@ class CrawlUrl(models.Model):
 @python_2_unicode_compatible
 class DataItem(models.Model):
     """Hold definition for data that will be extracted."""
-    name = models.CharField(max_length=50, verbose_name=_("Name"),
-                            help_text=_("Data's name. E.g: Article, News, "
-                                        "Video, etc..."))
+    name = models.CharField(
+        max_length=50, verbose_name=_("Name"),
+        help_text=_("Data's name. E.g: Article, News, Video, etc..."))
     base = models.CharField(
         max_length=512, verbose_name=_("Base XPath"),
         help_text=_("Base XPath to target's data container in page. Empty "
@@ -290,15 +278,16 @@ class DataItem(models.Model):
 
 @python_2_unicode_compatible
 class Collector(models.Model):
-    """This could be a single site or part of a site which contains wanted
-    content"""
-    # name = models.CharField(max_length=256)
-    link = models.CharField(max_length=512, verbose_name=_("Link"),
-                            help_text=_("Relative xpath from DataItem's base "
-                                        "to the link that contains data's "
-                                        "information. Empty means information "
-                                        "is inside base."),
-                            null=True, blank=True)
+    """Collector set of selectors for extracting data. One Data Item can have
+    multiple collectors."""
+    data_item = models.ForeignKey(
+        DataItem, verbose_name=_("data item"), related_name="collectors")
+    link = models.CharField(
+        max_length=512, verbose_name=_("Link"),
+        help_text=_("Relative xpath from DataItem's base to the link that "
+                    "contains data's information. Empty means information "
+                    "is inside base."),
+        null=True, blank=True)
     get_image = models.BooleanField(
         default=True,
         help_text=_('Download images found inside extracted content'))
@@ -308,14 +297,10 @@ class Collector(models.Model):
         help_text=_('List of Regex rules will be applied to refine data'),
         null=True, blank=True
     )
-    # Extra settings
-    # black_words = models.CharField(max_length=256, blank=True, null=True)
-    data_item = models.ForeignKey(DataItem, verbose_name=_("Data item"),
-                                  related_name="collectors")
 
     def __str__(self):
-        return _('Collector: {0}-{1}').format(force_text(self.data_item),
-                                              self.link)
+        return _('Collector: {0}-{1}').format(
+            force_text(self.data_item), self.link)
 
     @property
     def selector_dict(self):
@@ -328,13 +313,15 @@ class Collector(models.Model):
 
 @python_2_unicode_compatible
 class Selector(models.Model):
-    """docstring for DataElement"""
+    """docstring for DataCollector"""
+    collector = models.ForeignKey(
+        Collector, verbose_name=_("parent collector"), related_name="selectors")
     key = models.SlugField()
     xpath = models.CharField(max_length=512)
     attribute = models.CharField(
-        max_length=50, verbose_name=_("Attribute"),
-        help_text=_("Name of element's attribute. If given, element's "
-                    "attribute will be returned instead of element's "
+        max_length=50, verbose_name=_("attribute"),
+        help_text=_("Name of collector's attribute. If given, collector's "
+                    "attribute will be returned instead of collector's "
                     "content."),
         null=True, blank=True)
     data_type = models.CharField(max_length=64, choices=DATA_TYPES)
@@ -348,8 +335,6 @@ class Selector(models.Model):
                                         "selector contains one of given words."
                                         ),
                             null=True, blank=True)
-    collector = models.ForeignKey(Collector, verbose_name=_("Collector"),
-                                  related_name="selectors")
 
     def __str__(self):
         return _('Selector: {0} - Collector: {1}').format(
@@ -432,18 +417,8 @@ class LocalContent(models.Model):
 
 
 @python_2_unicode_compatible
-class UserAgent(models.Model):
-    """ Define a specific user agent for being used in Source """
-    name = models.CharField(_('UA Name'), max_length=64)
-    value = models.CharField(_('User Agent String'), max_length=256)
-
-    def __str__(self):
-        return _('User Agent: {0}').format(self.name)
-
-
-@python_2_unicode_compatible
 class ProxyServer(models.Model):
-    """ Stores information of proxy server """
+    """Stores information of proxy server."""
     name = models.CharField(_('Proxy Server Name'), max_length=64)
     address = models.CharField(_('Address'), max_length=128)
     port = models.IntegerField(_('Port'))

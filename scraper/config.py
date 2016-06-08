@@ -2,6 +2,7 @@ import re
 import logging
 
 from django.conf import settings
+from django.utils.translation import ugettext_lazy as _
 
 
 logger = logging.getLogger(__name__)
@@ -18,6 +19,16 @@ DEFAULT_REPLACE_RULES = [
     re.compile(r'<a .*?>|</a>', re.IGNORECASE),
     re.compile(r'<h\d.*</h\d>', re.IGNORECASE),
 ]
+
+MODE_CRAWL = 'crawl'            # Crawl and scraping data
+MODE_EXTRACT = 'extract'        # Single extracting from one page
+MODE_READ = 'read'              # Get readable content
+
+WORK_MODE_CHOICES = (
+    (MODE_CRAWL, _('crawl & scrape data')),
+    (MODE_EXTRACT, _('extract from single page')),
+    (MODE_READ, _('get readable content'))
+)
 
 DATA_TYPES = (
     ('text', 'Text content'),
