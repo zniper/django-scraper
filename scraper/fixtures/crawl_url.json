@@ -1,0 +1,32 @@
+[
+{
+    "model": "scraper.crawlurl",
+    "pk": 1,
+    "fields": {
+        "base": "http://127.0.0.1:9999/test_data/yc/yc.0.html",
+        "number_pattern": null,
+        "text_pattern": null,
+        "spider": 1
+    }
+},
+{
+    "model": "scraper.crawlurl",
+    "pk": 2,
+    "fields": {
+        "spider": 2,
+        "base": "https://blog.ycombinator.com/?page={0}",
+        "number_pattern": "[1, 5, 1]",
+        "text_pattern": ""
+    }
+},
+{
+    "model": "scraper.crawlurl",
+    "pk": 3,
+    "fields": {
+        "base": "http://127.0.0.1:9999/test_data/yc/yc.0.html",
+        "number_pattern": null,
+        "text_pattern": null,
+        "spider": 3
+    }
+}
+]

@@ -1,0 +1,255 @@
+[
+{
+    "model": "scraper.selector",
+    "pk": 1,
+    "fields": {
+        "collector": 1,
+        "key": "url",
+        "xpath": ".//header/div/h2/a",
+        "attribute": "href",
+        "data_type": "text",
+        "required_words": null,
+        "black_words": null
+    }
+},
+{
+    "model": "scraper.selector",
+    "pk": 2,
+    "fields": {
+        "collector": 1,
+        "key": "title",
+        "xpath": ".//header/div/h2/a",
+        "attribute": "",
+        "data_type": "text",
+        "required_words": null,
+        "black_words": null
+    }
+},
+{
+    "model": "scraper.selector",
+    "pk": 3,
+    "fields": {
+        "collector": 2,
+        "key": "author",
+        "xpath": "//*[@id=\"main\"]/article/header/div/div/a",
+        "attribute": "",
+        "data_type": "text",
+        "required_words": null,
+        "black_words": null
+    }
+},
+{
+    "model": "scraper.selector",
+    "pk": 4,
+    "fields": {
+        "collector": 2,
+        "key": "content",
+        "xpath": "//*[@class=\"post-body\"]",
+        "attribute": "",
+        "data_type": "html",
+        "required_words": null,
+        "black_words": null
+    }
+},
+{
+    "model": "scraper.selector",
+    "pk": 5,
+    "fields": {
+        "collector": 3,
+        "key": "title",
+        "xpath": ".//header/div/h2/a",
+        "attribute": "",
+        "data_type": "text",
+        "required_words": null,
+        "black_words": null
+    }
+},
+{
+    "model": "scraper.selector",
+    "pk": 6,
+    "fields": {
+        "collector": 3,
+        "key": "url",
+        "xpath": ".//header/div/h2/a",
+        "attribute": "href",
+        "data_type": "text",
+        "required_words": null,
+        "black_words": null
+    }
+},
+{
+    "model": "scraper.selector",
+    "pk": 7,
+    "fields": {
+        "collector": 3,
+        "key": "content",
+        "xpath": ".//div[@class=\"post-body\"]",
+        "attribute": "",
+        "data_type": "html",
+        "required_words": null,
+        "black_words": null
+    }
+},
+{
+    "model": "scraper.selector",
+    "pk": 8,
+    "fields": {
+        "collector": 3,
+        "key": "author",
+        "xpath": ".//footer/span/a[2]",
+        "attribute": "",
+        "data_type": "text",
+        "required_words": null,
+        "black_words": null
+    }
+},
+{
+    "model": "scraper.selector",
+    "pk": 9,
+    "fields": {
+        "collector": 4,
+        "key": "url",
+        "xpath": ".//header/div/h2/a",
+        "attribute": "href",
+        "data_type": "text",
+        "required_words": null,
+        "black_words": null
+    }
+},
+{
+    "model": "scraper.selector",
+    "pk": 10,
+    "fields": {
+        "collector": 4,
+        "key": "title",
+        "xpath": ".//header/div/h2/a",
+        "attribute": "",
+        "data_type": "text",
+        "required_words": [
+            "YC W15"
+        ],
+        "black_words": null
+    }
+},
+{
+    "model": "scraper.selector",
+    "pk": 11,
+    "fields": {
+        "collector": 5,
+        "key": "author",
+        "xpath": "//*[@id=\"main\"]/article/header/div/div/a",
+        "attribute": "",
+        "data_type": "text",
+        "required_words": null,
+        "black_words": null
+    }
+},
+{
+    "model": "scraper.selector",
+    "pk": 12,
+    "fields": {
+        "collector": 5,
+        "key": "content",
+        "xpath": "//*[@class=\"post-body\"]",
+        "attribute": "",
+        "data_type": "html",
+        "required_words": null,
+        "black_words": null
+    }
+},
+{
+    "model": "scraper.selector",
+    "pk": 13,
+    "fields": {
+        "collector": 6,
+        "key": "url",
+        "xpath": ".//header/div/h2/a",
+        "attribute": "href",
+        "data_type": "text",
+        "required_words": null,
+        "black_words": null
+    }
+},
+{
+    "model": "scraper.selector",
+    "pk": 14,
+    "fields": {
+        "collector": 6,
+        "key": "title",
+        "xpath": ".//header/div/h2/a",
+        "attribute": "",
+        "data_type": "text",
+        "required_words": null,
+        "black_words": [
+            "YC W15"
+        ]
+    }
+},
+{
+    "model": "scraper.selector",
+    "pk": 15,
+    "fields": {
+        "collector": 7,
+        "key": "author",
+        "xpath": "//*[@id=\"main\"]/article/header/div/div/a",
+        "attribute": "",
+        "data_type": "text",
+        "required_words": null,
+        "black_words": null
+    }
+},
+{
+    "model": "scraper.selector",
+    "pk": 16,
+    "fields": {
+        "collector": 7,
+        "key": "content",
+        "xpath": "//*[@class=\"post-body\"]",
+        "attribute": "",
+        "data_type": "html",
+        "required_words": null,
+        "black_words": null
+    }
+},
+{
+    "model": "scraper.selector",
+    "pk": 17,
+    "fields": {
+        "collector": 7,
+        "key": "detail_title",
+        "xpath": "//*[@id=\"main\"]/article/header/div/h2/a",
+        "attribute": "",
+        "data_type": "text",
+        "required_words": null,
+        "black_words": [
+            "YC W15"
+        ]
+    }
+},
+{
+    "model": "scraper.selector",
+    "pk": 18,
+    "fields": {
+        "collector": 8,
+        "key": "content",
+        "xpath": "//*[@id=\"contributors\"]/ul",
+        "attribute": "",
+        "data_type": "html",
+        "required_words": null,
+        "black_words": null
+    }
+},
+{
+    "model": "scraper.selector",
+    "pk": 19,
+    "fields": {
+        "collector": 4,
+        "key": "html",
+        "xpath": ".//header/div/h2/a",
+        "attribute": "href",
+        "data_type": "binary",
+        "required_words": null,
+        "black_words": null
+    }
+}
+]

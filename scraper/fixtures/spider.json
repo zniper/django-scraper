@@ -1,0 +1,44 @@
+[
+{
+    "model": "scraper.spider",
+    "pk": 1,
+    "fields": {
+        "name": "YC",
+        "mode": "crawl",
+        "expand_links": [
+            "//*[@id=\"main\"]/div/ul/li/a[@rel=\"next\"]"
+        ],
+        "crawl_depth": 3,
+        "headers": null,
+        "proxies": [1]
+    }
+},
+{
+    "model": "scraper.spider",
+    "pk": 2,
+    "fields": {
+        "name": "Y Combinator Posthaven",
+        "mode": "crawl",
+        "expand_links": [
+            "//*[@id=\"main\"]/div/ul/li[2]/a"
+        ],
+        "crawl_depth": 2,
+        "headers": null,
+        "proxies": []
+    }
+},
+{
+    "model": "scraper.spider",
+    "pk": 3,
+    "fields": {
+        "name": "YC with filters",
+        "mode": "crawl",
+        "expand_links": [
+            "//*[@id=\"main\"]/div/ul/li/a[@rel=\"next\"]"
+        ],
+        "crawl_depth": 3,
+        "headers": null,
+        "proxies": []
+    }
+}
+]

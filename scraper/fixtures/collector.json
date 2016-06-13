@@ -1,0 +1,82 @@
+[
+{
+    "model": "scraper.collector",
+    "pk": 1,
+    "fields": {
+        "data_item": 1,
+        "link": "",
+        "get_image": true,
+        "replace_rules": null
+    }
+},
+{
+    "model": "scraper.collector",
+    "pk": 2,
+    "fields": {
+        "data_item": 1,
+        "link": ".//header/div/h2/a",
+        "get_image": true,
+        "replace_rules": null
+    }
+},
+{
+    "model": "scraper.collector",
+    "pk": 3,
+    "fields": {
+        "data_item": 2,
+        "link": "",
+        "get_image": true,
+        "replace_rules": null
+    }
+},
+{
+    "model": "scraper.collector",
+    "pk": 4,
+    "fields": {
+        "data_item": 3,
+        "link": "",
+        "get_image": true,
+        "replace_rules": null
+    }
+},
+{
+    "model": "scraper.collector",
+    "pk": 5,
+    "fields": {
+        "data_item": 3,
+        "link": ".//header/div/h2/a",
+        "get_image": true,
+        "replace_rules": null
+    }
+},
+{
+    "model": "scraper.collector",
+    "pk": 6,
+    "fields": {
+        "data_item": 4,
+        "link": "",
+        "get_image": true,
+        "replace_rules": null
+    }
+},
+{
+    "model": "scraper.collector",
+    "pk": 7,
+    "fields": {
+        "data_item": 4,
+        "link": ".//header/div/h2/a",
+        "get_image": true,
+        "replace_rules": null
+    }
+},
+{
+    "model": "scraper.collector",
+    "pk": 8,
+    "fields": {
+        "data_item": 5,
+        "link": "",
+        "get_image": false,
+        "replace_rules": null
+    }
+}
+]

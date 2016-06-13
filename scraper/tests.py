@@ -1,36 +1,30 @@
 from __future__ import unicode_literals
 
-from copy import deepcopy
-
+import json
 import os
-from django.utils import timezone
+from collections import OrderedDict
+from copy import deepcopy
 from os.path import join
 from shutil import rmtree
 from zipfile import ZipFile
 
-from django.test import TestCase
+from django.conf import settings
 from django.core.files.storage import default_storage as storage
+from django.test import TestCase, LiveServerTestCase
+from django.utils import timezone
 from django.utils.encoding import force_text
 from django.utils.translation import ugettext_lazy as _
 
+from lxml import etree
+
+from runner import Page, ListingPage, DetailedPage, SpiderRunner
 from scraper import utils, models, config
-from scraper.config import INVALID_DATA
+from scraper.config import INVALID_DATA, INDEX_JSON, TEMP_DIR, CRAWL_ROOT
 from scraper.extractor import Extractor
 
-LOCAL_HOST = 'http://127.0.0.1:8000/'
 DATA_URL = """https://raw.githubusercontent.com/zniper/django-scraper/master/scraper/test_data/"""
 DATA_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                         'test_data')
-
-
-# For future use, with real web server
-# def start_local_site(path=''):
-#     """ Just a simple local site for testing HTTP requests """
-#     PORT = 8000
-#     handler = SimpleHTTPServer.SimpleHTTPRequestHandler
-#     httpd = SocketServer.TCPServer(('', PORT), handler)
-#     print 'Local test server is up at', PORT
-#     httpd.serve_forever()
 
 
 def get_path(file_name):
@@ -48,13 +42,6 @@ def exists(path):
         parent, name = path.rstrip('/').rsplit('/', 1)
         res = storage.listdir(parent)
         return name in res[0] or name in res[1]
-
-
-class UserAgentTests(TestCase):
-    def test_create(self):
-        ua = models.UserAgent(name='Test UA', value='UA string')
-        ua.save()
-        self.assertNotEqual(ua.pk, None)
 
 
 class ProxyServerTests(TestCase):
@@ -76,9 +63,13 @@ def get_extractor(file_name, url=''):
 
 
 class ExtractorLocalTests(TestCase):
+    yc_0_html = os.path.join('yc', 'yc.0.html')
+    yc_0_html_path = get_path(yc_0_html)
+    yc_a0_html_path = get_path(os.path.join('yc', 'yc.a0.html'))
+
     @classmethod
     def setUpClass(self):
-        self.extractor = get_extractor('yc.0.html')
+        self.extractor = get_extractor(self.yc_0_html)
 
     @classmethod
     def tearDownClass(self):
@@ -120,7 +111,7 @@ class ExtractorLocalTests(TestCase):
         self.assertEqual(link in links, True)
 
     def test_extract_article(self):
-        html = open(get_path('yc.a0.html'), 'r').read()
+        html = open(self.yc_a0_html_path, 'r').read()
         extr = Extractor('http://127.0.0.1/', html=html)
         data = extr.extract_article()
         self.assertNotEqual(data['title'], '')
@@ -137,7 +128,7 @@ class ExtractorLocalTests(TestCase):
         self.assertEqual(res, [])
 
     def test_refine_content(self):
-        with open(get_path('yc.0.html'), 'r') as index:
+        with open(self.yc_0_html_path, 'r') as index:
             content = index.read().decode("utf-8")
             self.assertNotEqual(content.find("<section id='bio'>"), -1)
             self.assertNotEqual(content.find("<section id='contributors'>"),
@@ -150,7 +141,7 @@ class ExtractorLocalTests(TestCase):
         self.assertEqual(refined.find("<div class='archive-link'>"), -1)
 
     def test_refine_content_no_rule(self):
-        with open(get_path('yc.0.html'), 'r') as index:
+        with open(self.yc_0_html_path, 'r') as index:
             content = index.read()
             rules = []
             refined = self.extractor.refine_content(content, rules)
@@ -167,14 +158,16 @@ class ExtractorLocalTests(TestCase):
         self.assertEqual(file_name, None)
 
 
-class ExtractorOnlineTests(TestCase):
+class ExtractorOnlineTests(LiveServerTestCase):
     @classmethod
-    def setUpClass(self):
-        pass
+    def setUpClass(cls):
+        super(ExtractorOnlineTests, cls).setUpClass()
+        cls.yc_0_html_path = "{0}{1}yc/yc.0.html".format(
+            cls.live_server_url, settings.TEST_DATA_URL)
 
     @classmethod
     def tearDownClass(self):
-        pass
+        super(ExtractorOnlineTests, self).tearDownClass()
 
     def tearDown(self):
         location = self.extractor.location
@@ -185,7 +178,7 @@ class ExtractorOnlineTests(TestCase):
                 os.remove(location)
 
     def setUp(self):
-        self.extractor = Extractor(DATA_URL + 'yc.0.html')
+        self.extractor = Extractor(self.yc_0_html_path)
         self.selectors = {
             'post': {
                 "xpath": "//div[@id='main']/article[@class='post']",
@@ -212,7 +205,7 @@ class ExtractorOnlineTests(TestCase):
 
     def test_extract_content_with_ua(self):
         UA = 'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2228.0 Safari/537.36'
-        self.extractor = Extractor(DATA_URL + 'yc.0.html', user_agent=UA)
+        self.extractor = Extractor(self.yc_0_html_path, user_agent=UA)
         data, path = self.extractor.extract_content(self.selectors)
         self.assertGreater(len(data['content']['post']), 0)
         self.assertNotEqual(path, '')
@@ -275,12 +268,12 @@ class SpiderMock(object):
 class CrawlUrlTests(TestCase):
     """Tests for CrawlUrl model."""
 
-    fixtures = ["spiders.json", "crawl_urls.json"]
+    fixtures = ["spider.json", "crawl_url.json"]
 
     @classmethod
     def setUpClass(cls):
         super(CrawlUrlTests, cls).setUpClass()
-        cls.spider = models.Spider.objects.get(pk=1)
+        cls.spider = models.Spider.objects.get(pk=2)
 
     def test_create(self):
         """Test create a new CrawlUrl object."""
@@ -294,7 +287,7 @@ class CrawlUrlTests(TestCase):
                          "https://blog.ycombinator.com/?page={0}")
 
     def test_generate_urls(self):
-        url = models.CrawlUrl.objects.get(pk=1)
+        url = models.CrawlUrl.objects.get(pk=2)
         self.assertEqual(list(url.generate_urls()),
                          ['https://blog.ycombinator.com/?page=1',
                           'https://blog.ycombinator.com/?page=2',
@@ -303,7 +296,7 @@ class CrawlUrlTests(TestCase):
 
 
 class DataItemTests(TestCase):
-    fixtures = ["spiders.json"]
+    fixtures = ["spider.json"]
 
     @classmethod
     def setUpClass(cls):
@@ -321,8 +314,8 @@ class DataItemTests(TestCase):
 
 
 class CollectorTests(TestCase):
-    fixtures = ["spiders.json", "data_items.json", "collectors.json",
-                "selectors.json"]
+    fixtures = ["spider.json", "data_item.json", "collector.json",
+                "selector.json"]
 
     @classmethod
     def setUpClass(cls):
@@ -342,7 +335,7 @@ class CollectorTests(TestCase):
         ))
 
     def test_selector_dict(self):
-        collector = models.Collector.objects.get(pk=1)
+        collector = models.Collector.objects.get(pk=3)
         data_xpaths = collector.selector_dict
         self.assertEqual(len(data_xpaths), 4)
         self.assertEqual(set(data_xpaths.keys()),
@@ -350,8 +343,8 @@ class CollectorTests(TestCase):
 
 
 class SelectorTests(TestCase):
-    fixtures = ["collectors.json", "selectors.json", "data_items.json",
-                "spiders.json"]
+    fixtures = ["collector.json", "selector.json", "data_item.json",
+                "spider.json"]
 
     def test_create(self):
         collector = models.Collector.objects.get(pk=1)
@@ -371,7 +364,7 @@ class SelectorTests(TestCase):
                          ))
 
     def test_to_dict(self):
-        selector = models.Selector.objects.get(pk=2)
+        selector = models.Selector.objects.get(pk=6)
         selector_dict = selector.to_dict()
         self.assertEqual(selector_dict, {"key": "url",
                                          "xpath": ".//header/div/h2/a",
@@ -382,36 +375,418 @@ class SelectorTests(TestCase):
                                          })
 
 
+class GeneralPageTests(TestCase):
+    """Tests for general page."""
+
+    fixtures = ["spider.json"]
+
+    @classmethod
+    def setUpClass(cls):
+        super(GeneralPageTests, cls).setUpClass()
+        cls.spider = models.Spider.objects.get(pk=2)
+        cls.runner = SpiderRunner(cls.spider, task_id="task-id")
+        cls.page_source = open(get_path(os.path.join('yc', 'yc.0.html')), 'r') \
+            .read()
+        cls.page = Page(cls.runner, "http://test.url",
+                        1, cls.page_source)
+
+    def test_init_general_page(self):
+        self.assertEqual(self.page.spider, self.spider)
+        self.assertIsInstance(self.page.extractor, Extractor)
+        self.assertEqual(self.page.extractor.base_dir, self.runner.base_dir)
+
+    def test_extract_data(self):
+        with self.assertRaises(NotImplementedError):
+            self.page.extract_data()
+
+    def test_find_expand_links(self):
+        expand_links = self.page.find_expand_links()
+        self.assertEqual(expand_links, {'http://test.url/yc.1.html': 2})
+
+
+class DetailedPageTests(LiveServerTestCase):
+    """Tests for DetailedPage"""
+
+    fixtures = ["spider.json", "crawl_url.json", "collector.json",
+                "selector.json", "data_item.json"]
+
+    @classmethod
+    def setUpClass(cls):
+        super(DetailedPageTests, cls).setUpClass()
+        cls.yc_0_url = "{0}{1}yc/yc.0.html".format(
+            cls.live_server_url, settings.TEST_DATA_URL)
+        cls.yc_a0_url = "{0}{1}yc/yc.a0.html".format(
+            cls.live_server_url, settings.TEST_DATA_URL)
+
+    def setUp(self):
+        super(DetailedPageTests, self).setUp()
+        self.spider = models.Spider.objects.get(pk=3)
+        self.collector = models.Collector.objects.get(pk=2)
+        self.runner = SpiderRunner(self.spider, task_id="task-id")
+        yc_0_source = open(get_path(os.path.join('yc', 'yc.0.html')), 'r') \
+            .read()
+        self.yc_a0_source = open(
+            get_path(os.path.join('yc', 'yc.a0.html')), 'r').read()
+        self.listing_page = ListingPage(self.runner, self.yc_0_url, 1,
+                                        yc_0_source)
+        self.page = DetailedPage(self.runner, self.yc_a0_url, 2,
+                                 self.yc_a0_source,
+                                 parent=self.listing_page,
+                                 collector=self.collector)
+
+    def tearDown(self):
+        # Remove extractor's location dir
+        if os.path.exists(self.page.extractor.location):
+            rmtree(self.page.extractor.location)
+
+    def test_init_detailed_page(self):
+        self.assertEqual(self.page.collector, self.collector)
+        self.assertEqual(self.page.parent, self.listing_page)
+        self.assertEqual(self.page.extractor._uuid,
+                         self.listing_page.extractor._uuid)
+        self.assertEqual(self.page.extractor._location,
+                         self.listing_page.extractor._location)
+
+    def test_extract_data(self):
+        results = self.page.extract_data(deferred_download=False)
+        self.assertEqual(len(results), 2)
+        data, expand_links = results
+        self.assertEqual(expand_links, {})
+        self.assertEqual(set(data.keys()), {"content", "images", "media"})
+        self.assertEqual(data["media"], [])
+        self.assertEqual(len(data["images"]), 1)
+        self.assertEqual(set(data["content"].keys()), {"content", "author"})
+        self.assertEqual(data["content"]['author'], ['Y Combinator'])
+
+    def test_extract_data_invalid(self):
+        # Get a collector that its selector has black_words filter.
+        collector = models.Collector.objects.get(pk=7)
+        self.page = DetailedPage(self.runner, self.yc_a0_url, 2,
+                                 self.yc_a0_source,
+                                 parent=self.listing_page,
+                                 collector=collector)
+        results = self.page.extract_data(deferred_download=False)
+        self.assertEqual(len(results), 2)
+        data, expand_links = results
+        self.assertEqual(data, INVALID_DATA)
+
+    def test_extract_data_with_deferred_download(self):
+        results = self.page.extract_data(deferred_download=True)
+        self.assertEqual(len(results), 2)
+        data, expand_links = results
+        self.assertEqual(expand_links, {})
+        self.assertEqual(set(data.keys()), {"content", "images", "media",
+                                            "deferred_info"})
+        self.assertEqual(data["media"], [])
+        self.assertEqual(data["images"], [])
+        self.assertEqual(set(data["deferred_info"].keys()), {"images", "media"})
+        self.assertIn("content", data["deferred_info"]["images"])
+        content_images = data["deferred_info"]["images"]["content"]
+        self.assertIn("elements", content_images)
+        self.assertEqual(set(content_images.keys()), {"elements", "data_type"})
+        self.assertEqual(len(content_images["elements"]), 1)
+        self.assertEqual(data["deferred_info"]["media"], {})
+        self.assertEqual(set(data["content"].keys()), {"content", "author"})
+        self.assertEqual(data["content"]['author'], ['Y Combinator'])
+
+
+class ListingPageTests(LiveServerTestCase):
+    """Tests for ListingPage"""
+    fixtures = ["spider.json", "crawl_url.json", "collector.json",
+                "selector.json", "data_item.json"]
+
+    @classmethod
+    def setUpClass(cls):
+        super(ListingPageTests, cls).setUpClass()
+        cls.yc_0_url = "{0}{1}yc/yc.0.html".format(
+            cls.live_server_url, settings.TEST_DATA_URL)
+        cls.yc_a0_url = "{0}{1}yc/yc.a0.html".format(
+            cls.live_server_url, settings.TEST_DATA_URL)
+
+    def setUp(self):
+        super(ListingPageTests, self).setUp()
+        self.spider = models.Spider.objects.get(pk=3)
+        self.runner = SpiderRunner(self.spider, task_id="task-id")
+        self.yc_0_source = open(
+            get_path(os.path.join('yc', 'yc.0.html')), 'r').read()
+        self.yc_a0_source = open(
+            get_path(os.path.join('yc', 'yc.a0.html')), 'r').read()
+        self.page = ListingPage(self.runner, self.yc_0_url, 1, self.yc_0_source)
+        self.data_item = models.DataItem.objects.get(pk=3)
+        self.base = self.page.extractor.xpath(self.data_item.base)[0]
+        self.collector = models.Collector.objects.get(pk=5)
+        self.page_sources = {
+            self.yc_0_url: self.yc_0_source,
+            self.yc_a0_url: self.yc_a0_source
+        }
+
+    def tearDown(self):
+        # Remove extractor's location dir
+        if os.path.exists(self.page.extractor.location):
+            rmtree(self.page.extractor.location)
+
+    def test_get_collector_data_with_valid_link(self):
+        # Get collector with link
+        collector = self.collector
+        collector_data = self.page.get_collector_data(self.base, collector)
+        self.assertEqual(set(collector_data.keys()),
+                         {"collector", "links", "pages"})
+        self.assertEqual(collector_data["collector"], collector)
+        self.assertEqual(collector_data["pages"], [])
+        self.assertEqual(collector_data["links"],
+                         ['http://127.0.0.1:9999/test_data/yc/yc.a0.html'])
+
+    def test_get_collector_data_with_invalid_link(self):
+        # Get collector with link
+        collector = self.collector
+        collector.link = "//ns:a"
+        collector_data = self.page.get_collector_data(self.base, collector)
+        self.assertEqual(set(collector_data.keys()),
+                         {"collector", "links", "pages"})
+        self.assertEqual(collector_data["collector"], collector)
+        self.assertEqual(collector_data["pages"], [])
+        self.assertEqual(collector_data["links"], [])
+
+    def test_get_collector_data_without_link(self):
+        # Get collector without link
+        collector = models.Collector.objects.get(pk=4)
+        collector_data = self.page.get_collector_data(self.base, collector)
+        self.assertEqual(set(collector_data.keys()),
+                         {"collector", "links", "pages"})
+        self.assertEqual(collector_data["collector"], collector)
+        self.assertEqual(collector_data["links"], [])
+        self.assertEqual(len(collector_data["pages"]), 1)
+        page = collector_data["pages"][0]
+        self.assertEqual(page.url, self.page.url)
+        self.assertEqual(page.source, etree.tounicode(self.base))
+
+    def test_find_items_with_base(self):
+        items = self.page.find_items_for(self.data_item)
+        self.assertEqual(len(items), 3)
+        item = items[0]
+        self.assertEqual(set(item.keys()), {"data", "collectors"})
+        self.assertEqual(item["data"], {})
+        collectors = item["collectors"]
+        self.assertEqual(len(collectors), 2)
+
+    def test_find_items_without_base(self):
+        data_item = models.DataItem.objects.get(pk=5)
+        items = self.page.find_items_for(data_item)
+        self.assertEqual(len(items), 1)
+        item = items[0]
+        self.assertEqual(set(item.keys()), {"data", "collectors"})
+        self.assertEqual(len(item["collectors"]), 1)
+
+    def test_extract_data(self):
+        data, expand_links = self.page.extract_data()
+        self.assertEqual(expand_links,
+                         {'http://127.0.0.1:9999/test_data/yc/yc.1.html': 2})
+        self.assertEqual(
+            set(data.keys()),
+            {'ContributorList', 'NON-YC-W15 BlogPost', 'YC-W15 BlogPost'})
+        # Check ContributorList
+        self.assertEqual(len(data["ContributorList"]), 1)
+        self.assertEqual(data["ContributorList"][0]["media"], [])
+        self.assertEqual(data["ContributorList"][0]["images"], [])
+        self.assertEqual(set(data["ContributorList"][0]["content"].keys()),
+                         {"content"})
+        # Check NON-YC-W15 BlogPost
+        self.assertEqual(len(data["NON-YC-W15 BlogPost"]), 1)
+        self.assertEqual(data["NON-YC-W15 BlogPost"][0]["media"], [])
+        self.assertEqual(data["NON-YC-W15 BlogPost"][0]["images"], [])
+        self.assertEqual(data["NON-YC-W15 BlogPost"][0]["content"]["title"],
+                         ['YC Digest - 2/20-2/26'])
+        # Check YC-W15 BlogPost
+        self.assertEqual(len(data["YC-W15 BlogPost"]), 2)
+        self.assertEqual(len(data["YC-W15 BlogPost"][0]["media"]), 1)
+        self.assertIn("2669c715ecb8fa24f957ce7e3605f125697d50d0.html",
+                      data["YC-W15 BlogPost"][0]["media"][0])
+        self.assertEqual(data["YC-W15 BlogPost"][0]["images"],
+                         [('292ccf426955da481aecada2ea1022cca2c1438c.jpg',
+                           {'caption': ''})])
+        self.assertEqual(data["YC-W15 BlogPost"][0]["content"]['title'],
+                         ['Shift Messenger (YC W15) Makes It Easy For Workers '
+                          'To Swap Hours'])
+        self.assertEqual(len(data["YC-W15 BlogPost"][1]["media"]), 1)
+        self.assertIn("2c68001e37ac73a00cca98b8ecf28bdd246465f2.html",
+                      data["YC-W15 BlogPost"][1]["media"][0])
+        self.assertEqual(data["YC-W15 BlogPost"][1]["images"],
+                         [('66b3db3eeb02a148a8618d65621683addc1812f8.png',
+                           {'caption': ''})])
+        self.assertEqual(data["YC-W15 BlogPost"][1]["content"]['title'],
+                         [u'YesGraph (YC W15) Raises A Million To Build A '
+                          u'Better Referral System For Mobile Apps'])
+        # Check if index file path exists or not.
+        self.assertTrue(os.path.isfile(join(self.page.extractor.location,
+                                            INDEX_JSON)))
+
+    def test_extract_valid_item_data(self):
+        items = self.page.find_items_for(self.data_item)
+        item = items[0]
+        is_valid = self.page.extract_item_data(item, self.page_sources)
+        data = item['data']
+        self.assertTrue(is_valid)
+        self.assertEqual(set(data.keys()),
+                         {'content', 'images', 'deferred_info', 'media'})
+        self.assertEqual(data['images'], [])
+        self.assertEqual(data['media'], [])
+        self.assertEqual(set(data['deferred_info'].keys()), {"images", "media"})
+        content = data["content"]
+        self.assertEqual(set(content.keys()),
+                         {"url", "content", "author", "title"})
+        self.assertEqual(content["url"], ['yc.a0.html'])
+        self.assertEqual(content["author"], ['Y Combinator'])
+        self.assertEqual(content["title"],
+                         ['Shift Messenger (YC W15) Makes It Easy For Workers '
+                          'To Swap Hours'])
+        self.assertEqual(len(content["content"]), 1)
+        self.assertIn('<div class="post-body" id="post_body_816534">',
+                      content["content"][0])
+
+    def test_extract_invalid_item_data(self):
+        data_item = models.DataItem.objects.get(pk=4)
+        item = self.page.find_items_for(data_item)[0]
+        is_valid = self.page.extract_item_data(item, self.page_sources)
+        self.assertFalse(is_valid)
+        self.assertEqual(item["data"], {})
+
+    def test_aggregate_links(self):
+        self.page.expand_links = {"http://link1.com": 2, "http://link2.com": 2}
+        new_links = {"http://link1.com": 3, "https://link3.com": 3}
+        self.page.aggregate_links(new_links)
+        self.assertEqual(self.page.expand_links,
+                         {"http://link1.com": 2, "http://link2.com": 2,
+                          "https://link3.com": 3})
+
+    def test_get_link_from_element(self):
+        element = self.base.xpath(self.collector.link)[0]
+        link = self.page.get_link_from_element(element)
+        self.assertEqual(link, "http://127.0.0.1:9999/test_data/yc/yc.a0.html")
+        # Invalid element
+        self.assertIsNone(self.page.get_link_from_element(None))
+        # Not http/https link
+        element = etree.fromstring('<a href="ftp://host.com/abc.txt">File</a>')
+        self.assertIsNone(self.page.get_link_from_element(element))
+
+    def test_merge_data(self):
+        result = {"content": {"Item 1": [{"id": 1, "title": "Item 1.1"}],
+                              "Item 2": [{"id": 1, "title": "Item 2.1"}]},
+                  "media": ["/tmp/file1.txt"]}
+        item = {"content": {"Item 1": [{"id": 2, "title": "Item 1.2"}],
+                            "Item 3": [{"id": 1, "title": "Item 3.1"}]},
+                "media": ["/tmp/file2.txt"],
+                "images": ["/tmp/img1.jpg", "/tmp/img2.jpg"]}
+        result = self.page.merge_data(result, item)
+        self.assertEqual(
+            result,
+            {u'content': {u'Item 3': [{u'id': 1, u'title': u'Item 3.1'}],
+                          u'Item 2': [{u'id': 1, u'title': u'Item 2.1'}],
+                          u'Item 1': [{u'id': 1, u'title': u'Item 1.1'},
+                                      {u'id': 2, u'title': u'Item 1.2'}]},
+             'media': ['/tmp/file1.txt', '/tmp/file2.txt'],
+             'images': ['/tmp/img1.jpg', '/tmp/img2.jpg']})
+
+    def test_download_deferred_info(self):
+        items = self.page.find_items_for(self.data_item)
+        item = items[0]
+        self.page.extract_item_data(item, self.page_sources)
+        item = self.page.download_deferred_info(item)
+        data = item["data"]
+        self.assertEqual(set(data.keys()), {'content', 'images', 'media'})
+        self.assertEqual(data["images"],
+                         [('292ccf426955da481aecada2ea1022cca2c1438c.jpg',
+                           {'caption': ''})])
+        self.assertIn('292ccf426955da481aecada2ea1022cca2c1438c.jpg',
+                      data["content"]["content"][0])
+
+    def test_write_index(self):
+        data = {"content": []}
+        self.page.write_index(data)
+        file_path = join(self.page.extractor.location, INDEX_JSON)
+        self.assertTrue(os.path.isfile(file_path))
+        with open(file_path) as inp:
+            file_data = json.loads(inp.read())
+            self.assertEqual(set(file_data.keys()), {"url", "time", "data"})
+            self.assertEqual(file_data["data"], data)
+
+
+class SpiderRunnerTests(LiveServerTestCase):
+    """Tests for SpiderRunner"""
+
+    fixtures = ["spider.json", "crawl_url.json", "collector.json",
+                "selector.json", "data_item.json"]
+
+    @classmethod
+    def setUpClass(cls):
+        super(SpiderRunnerTests, cls).setUpClass()
+
+    def setUp(self):
+        super(SpiderRunnerTests, self).setUp()
+        self.spider = models.Spider.objects.get(pk=3)
+        self.runner = SpiderRunner(self.spider)
+
+    def test_init_runner(self):
+        self.assertEqual(self.runner.spider, self.spider)
+        self.assertEqual(self.runner.pages, [])
+        self.assertEqual(self.runner.crawled, set([]))
+        self.assertEqual(self.runner.base_dir,
+                         join(TEMP_DIR, self.spider.storage_location))
+        self.assertIsNotNone(self.runner.task_id)
+
+    def test_generate_task_id(self):
+        task_id = self.runner.generate_task_id()
+        self.assertIsNotNone(task_id)
+
+    def test_init_urls(self):
+        urls = self.runner.init_urls(["http://url1.com", "http2://url2.com"])
+        self.assertEqual(urls, OrderedDict({
+            "http://url1.com": 1,
+            "http2://url2.com": 1
+        }))
+
+    def test_combine_data(self):
+        data = {"Item 1": [{"id": 1}]}
+        page_data = {"Item 1": [{"id": 2}], "Item 2": [{"id": 1}]}
+        self.runner.combine_data(data, page_data)
+        self.assertEqual(data, {'Item 2': [{'id': 1}],
+                                'Item 1': [{'id': 1}, {'id': 2}]})
+
+    def test_download_pages(self):
+        pages = self.runner.download_pages(self.runner.urls)
+        self.assertEqual(len(pages), 1)
+        page = pages[0]
+        self.assertIsInstance(page, ListingPage)
+        self.assertEqual(page.depth, 1)
+
+    def test_run(self):
+        data = self.runner.run()
+        self.assertIsInstance(data, utils.Datum)
+        self.assertIn("path", data.extras)
+        self.assertEqual(len(data.extras['path']), 3)
+        self.assertEqual(
+            set(data.content.keys()),
+            {'ContributorList', 'NON-YC-W15 BlogPost', 'YC-W15 BlogPost'})
+
+
 class SpiderTests(TestCase):
+    fixtures = ["spider.json", "crawl_url.json", "collector.json",
+                "selector.json", "data_item.json"]
+
     def setUp(self):
         self.compress_option = models.COMPRESS_RESULT
         models.COMPRESS_RESULT = False
-
-        sel0 = models.Selector(
-            key='post',
-            xpath="//div[@class='post-body']",
-            data_type='html'
-        )
-        sel0.save()
-
-        col0 = models.Collector(name='news-content')
-        col0.save()
-        col0.selectors.add(sel0)
-
-        self.spider = models.Spider(
-            url=DATA_URL + 'yc.0.html',
-            name='Test Source',
-            target_links=["//div[@class='post-title']/h2/a"],
-            expand_links=['//a[@rel="next"]'],
-            crawl_depth=1,
-        )
-        self.spider.save()
-        self.spider.collectors.add(col0)
-        self.spider._extractor = get_extractor(
-            'yc.0.html', url=self.spider.url)
+        self.spider = models.Spider.objects.get(pk=3)
 
     def tearDown(self):
         models.COMPRESS_RESULT = self.compress_option
+
+    def test_storage_location(self):
+        now = timezone.now()
+        self.assertEqual(self.spider.storage_location,
+                         os.path.join(CRAWL_ROOT, now.strftime('%Y/%m/%d')))
+
+    def test_get_proxy(self):
+        self.assertIsNone(self.spider.get_proxy())
 
     def get_path(self, location):
         if hasattr(storage, 'base_location'):
@@ -520,7 +895,7 @@ class SpiderTests(TestCase):
 
 
 class LocalContentTests(TestCase):
-    fixtures = ["spiders.json", "results.json"]
+    fixtures = ["spider.json", "result.json"]
 
     def test_create(self):
         result = models.Result.objects.get(pk=1)
@@ -537,7 +912,7 @@ class LocalContentTests(TestCase):
 
 
 class ResultTests(TestCase):
-    fixtures = ["spiders.json", "results.json"]
+    fixtures = ["spider.json", "result.json"]
 
     def test_create(self):
         spider = models.Spider.objects.get(pk=1)

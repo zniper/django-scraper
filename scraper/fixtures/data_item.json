@@ -1,0 +1,47 @@
+[
+{
+    "model": "scraper.dataitem",
+    "pk": 1,
+    "fields": {
+        "name": "BlogPost",
+        "base": "//*[@id=\"main\"]/article",
+        "spider": 1
+    }
+},
+{
+    "model": "scraper.dataitem",
+    "pk": 2,
+    "fields": {
+        "name": "BlogPost",
+        "base": "//*[@id=\"main\"]/article",
+        "spider": 2
+    }
+},
+{
+    "model": "scraper.dataitem",
+    "pk": 3,
+    "fields": {
+        "name": "YC-W15 BlogPost",
+        "base": "//*[@id=\"main\"]/article",
+        "spider": 3
+    }
+},
+{
+    "model": "scraper.dataitem",
+    "pk": 4,
+    "fields": {
+        "name": "NON-YC-W15 BlogPost",
+        "base": "//*[@id=\"main\"]/article",
+        "spider": 3
+    }
+},
+{
+    "model": "scraper.dataitem",
+    "pk": 5,
+    "fields": {
+        "name": "ContributorList",
+        "base": "",
+        "spider": 3
+    }
+}
+]

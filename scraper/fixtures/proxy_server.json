@@ -1,0 +1,12 @@
+[
+{
+    "model": "scraper.proxyserver",
+    "pk": 1,
+    "fields": {
+        "name": "Test Proxy",
+        "address": "127.0.0.1",
+        "port": 3456,
+        "protocol": "http"
+    }
+}
+]

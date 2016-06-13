@@ -2,6 +2,8 @@ from __future__ import unicode_literals
 
 import json
 import logging
+from collections import OrderedDict
+
 import os
 import urlparse
 import uuid
@@ -33,7 +35,7 @@ class Page(object):
 
     def extract_data(self):
         """Extract data from page's content."""
-        raise NotImplemented
+        raise NotImplementedError()
 
     def find_expand_links(self):
         """
@@ -106,42 +108,6 @@ class ListingPage(Page):
         # Returns crawled data and found expand_links
         return data, self.expand_links
 
-    def download_deferred_info(self, item):
-        """
-        Download item's images & binaries. Downloaded results will also be
-        updated to item's data.
-
-        Args:
-            item: item's current information in format:
-                {'data': {}, 'collectors': [list_of_collectors]}
-
-        Returns: updated item.
-        """
-        logger.info("Start downloading deferred items...")
-        deferred_info = item["data"]["deferred_info"]
-        # Download binary files
-        for field_name, urls in deferred_info["media"].items():
-            paths = []
-            for url in urls:
-                file_name = self.extractor.download_file(url)
-                paths.append(os.path.join(self.extractor._uuid, file_name))
-            item["data"]["content"][field_name] = paths
-            item["data"]["media"].extend(paths)
-        # Download images
-        for field_name, images_info in deferred_info["images"].items():
-            elements = images_info["elements"]
-            for element in elements:
-                item["data"]["images"].extend(
-                    self.extractor.extract_images(element)
-                )
-            # Get new content for item's field data after downloading.
-            item["data"]["content"][field_name] = get_content(
-                elements, images_info["data_type"]
-            )
-        # Removed deffered info from item
-        item["data"].pop("deferred_info")
-        return item
-
     def extract_item_data(self, item, page_sources):
         """
         Extract item's data from item's collectors, downloaded page_sources and
@@ -178,7 +144,7 @@ class ListingPage(Page):
                 page_data, page_expand_links = page.extract_data(
                     deferred_download=True
                 )
-                self.aggregate_links(page_expand_links, page.depth)
+                self.aggregate_links(page_expand_links)
                 # Check if page contains invalid data or not.
                 if page_data == INVALID_DATA:
                     # Cancel the collector because some fields has
@@ -194,7 +160,7 @@ class ListingPage(Page):
                 break
         return not is_invalid
 
-    def aggregate_links(self, new_links, depth):
+    def aggregate_links(self, new_links):
         """
         Aggregate current expand links with new ones.
 
@@ -206,8 +172,9 @@ class ListingPage(Page):
 
         """
         for link in new_links:
-            if link not in self.expand_links:
-                self.expand_links[link] = depth + 1
+            depth = min(self.expand_links.get(link, self.spider.crawl_depth),
+                        new_links[link])
+            self.expand_links[link] = depth
 
     def find_items_for(self, data_item):
         """
@@ -318,9 +285,6 @@ class ListingPage(Page):
 
         Returns: merged result.
         """
-        # Do nothing if item is empty
-        if not item:
-            return result
         for key in item:
             if isinstance(item[key], dict):
                 if not key in result:
@@ -333,6 +297,42 @@ class ListingPage(Page):
             else:
                 result[key] = item[key]
         return result
+
+    def download_deferred_info(self, item):
+        """
+        Download item's images & binaries. Downloaded results will also be
+        updated to item's data.
+
+        Args:
+            item: item's current information in format:
+                {'data': {}, 'collectors': [list_of_collectors]}
+
+        Returns: updated item.
+        """
+        logger.info("Start downloading deferred items...")
+        deferred_info = item["data"]["deferred_info"]
+        # Download binary files
+        for field_name, urls in deferred_info["media"].items():
+            paths = []
+            for url in urls:
+                file_name = self.extractor.download_file(url)
+                paths.append(os.path.join(self.extractor._uuid, file_name))
+            item["data"]["content"][field_name] = paths
+            item["data"]["media"].extend(paths)
+        # Download images
+        for field_name, images_info in deferred_info["images"].items():
+            elements = images_info["elements"]
+            for element in elements:
+                item["data"]["images"].extend(
+                    self.extractor.extract_images(element)
+                )
+            # Get new content for item's field data after downloading.
+            item["data"]["content"][field_name] = get_content(
+                elements, images_info["data_type"]
+            )
+        # Removed deffered info from item
+        item["data"].pop("deferred_info")
+        return item
 
     def write_index(self, data):
         """Write index file with page's result."""
@@ -384,32 +384,12 @@ class DetailedPage(Page):
             get_image=self.collector.get_image,
             selectors=selector_dict,
             replace_rules=self.collector.replace_rules,
-            deferred_download=True
+            deferred_download=deferred_download
         )
         if data == INVALID_DATA:
             # The data item is invalid
             return data, expand_links
-        # Only return data if it's not empty
-        if self.is_empty_data(data) and not data["images"] \
-                and not data["media"]:
-            return None, expand_links
         return data, expand_links
-
-    def is_empty_data(self, data):
-        """
-        Check if given data's content is empty or not.
-
-        Args:
-            data: extracted data that returned by extractor
-
-        Returns: True if data is empty, False if not.
-        """
-        is_empty = True
-        for key in data["content"]:
-            if data["content"][key]:
-                is_empty = False
-                break
-        return is_empty
 
 
 class SpiderRunner(object):
@@ -433,7 +413,7 @@ class SpiderRunner(object):
 
     def init_urls(self, urls):
         """Initiate urls dict from list of root urls."""
-        return {url: 1 for url in urls}
+        return OrderedDict([(url, 1) for url in urls])
 
     def run(self):
         """Start the spider."""
@@ -443,14 +423,16 @@ class SpiderRunner(object):
         data_dirs = []
         while self.urls:
             self.pages = self.download_pages(self.urls)
-            self.urls = {}
+            self.urls = OrderedDict()
             for page in self.pages:
                 data_dirs.append(page.extractor.location)
                 page_data, expand_links = page.extract_data()
                 self.combine_data(data, page_data)
+                # Add page's url to crawled list
+                self.crawled.add(page.url)
                 # Aggregate links
                 for link in expand_links:
-                    if link not in self.urls:
+                    if link not in self.urls and link not in self.crawled:
                         self.urls[link] = expand_links[link]
         return Datum(content=data, path=data_dirs)
 
@@ -474,12 +456,13 @@ class SpiderRunner(object):
         logger.info("Start downloading root/expand urls")
         page_sources = download_batch(urls.keys())
         pages = []
-        for url in page_sources:
-            page = ListingPage(
-                runner=self,
-                url=url,
-                depth=self.urls[url],
-                source=page_sources[url]
-            )
-            pages.append(page)
+        for url in urls:
+            if url in page_sources:
+                page = ListingPage(
+                    runner=self,
+                    url=url,
+                    depth=self.urls[url],
+                    source=page_sources[url]
+                )
+                pages.append(page)
         return pages
