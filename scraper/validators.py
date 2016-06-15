@@ -1,5 +1,6 @@
 from __future__ import unicode_literals
 
+from django.utils.deconstruct import deconstructible
 from lxml import etree
 from six import text_type
 
@@ -7,6 +8,7 @@ from django.core.exceptions import ValidationError
 from django.utils.translation import ugettext_lazy as _
 
 
+@deconstructible
 class ListValidator(object):
     """A validator that validates if a value is a list of given type or not."""
 
@@ -35,6 +37,7 @@ class ListValidator(object):
         return self.message
 
 
+@deconstructible
 class DictValidator(object):
     """A validator that validates if a value is a dictionary or not."""
 
@@ -47,6 +50,7 @@ class DictValidator(object):
                                   "invalid_dict")
 
 
+@deconstructible
 class XPathValidator(object):
     """A validator that validates if a value is a valid XPath or not."""
 
@@ -58,6 +62,7 @@ class XPathValidator(object):
             raise ValidationError(_("Invalid XPath."), "invalid_xpath")
 
 
+@deconstructible
 class XPathListValidator(ListValidator):
     """A validator that validates if a value is a list of valid XPaths or not.
     """
@@ -79,6 +84,7 @@ class XPathListValidator(ListValidator):
                     ), "invalid_xpath_list")
 
 
+@deconstructible
 class NumberPatternValidator(ListValidator):
     def __init__(self, message=""):
         super(NumberPatternValidator, self).__init__(int, message)
@@ -96,6 +102,7 @@ class NumberPatternValidator(ListValidator):
                     "invalid_number_pattern")
 
 
+@deconstructible
 class RequiredWordsValidator(ListValidator):
     def __init__(self, message=""):
         super(RequiredWordsValidator, self).__init__([text_type, list], message)
