@@ -51,7 +51,7 @@ class Spider(ExtractorMixin, models.Model):
         help_text=_('Set this > 1 in case of crawling from this page'))
     headers = JSONField(
         verbose_name=_("Headers"),
-        help_text=_("Define custom headers when download pages."),
+        help_text=_("Custom headers for downloads"),
         null=True, blank=True)
     proxies = models.ManyToManyField(
         'ProxyServer', verbose_name=_("proxy servers"), blank=True)
@@ -99,7 +99,7 @@ class Spider(ExtractorMixin, models.Model):
             urls = itertools.chain(urls, craw_url.generate_urls())
         return urls
 
-    def start(self, request, task_id=None):
+    def start(self, task_id=None):
         """Official entry point of the spider, accepts request as argument.
         Args:
             request - JSON data with all needed information
@@ -109,31 +109,29 @@ class Spider(ExtractorMixin, models.Model):
         """
         self._task = task_id = task_id or SpiderRunner.generate_task_id()
         data = Data(spider=self.id, task_id=task_id)
-
-        datum = self._perform(**request)
+        datum = self._perform(self.mode)
+        data.add_result(datum)
         result = self.create_result(data.dict, self._task)
-        if 'path' in datum.extras:
-            result.other = self._finalize(data)
-            result.save()
+        # Data should be finalized, but it's not really working now
+        # result.other = self._finalize(data)
+        # result.save()
         return result
 
-    def _perform(self, action, target, **kwargs):
+    def _perform(self, action, **kwargs):
         """Perform operation based on given parameters."""
-        operator = self
-        method = getattr(operator, action + '_' + target)
-        data = method(**kwargs)
-        data.extras['action'] = action
-        data.extras['target'] = target
+        method = getattr(self, '_' + action)
+        datum = method(**kwargs)
+        datum.extras['action'] = action
         # Content extracting needs some more refinements
-        post_scrape.send(self.__class__, result=data.json)
-        return data
+        post_scrape.send(self.__class__, result=datum.json)
+        return datum
 
     def _set_extractor(self, force=False):
         if force or self._extractor is None:
             self.extractor = self._new_extractor(self.url)
         return self.extractor
 
-    def crawl_content(self, **kwargs):
+    def _crawl(self, **kwargs):
         """ Extract all found links then scrape those pages
         Arguments:
         Returns:
