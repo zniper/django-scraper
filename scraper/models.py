@@ -15,11 +15,13 @@ from django.db import models
 from django.db.models.signals import pre_delete
 from django.dispatch.dispatcher import receiver
 from django.utils.encoding import force_text
-from django.utils.six import python_2_unicode_compatible
+from django.utils.six import python_2_unicode_compatible, text_type
 from django.utils.translation import ugettext_lazy as _
 from django.utils.timezone import now
 
 from scraper.runner import SpiderRunner
+from scraper.validators import ListValidator, DictValidator, XPathListValidator, \
+    NumberPatternValidator, XPathValidator, RequiredWordsValidator
 from .config import (
     DATA_TYPES, PROTOCOLS, INDEX_JSON, COMPRESS_RESULT, TEMP_DIR,
     NO_TASK_PREFIX, CRAWL_ROOT, WORK_MODE_CHOICES, MODE_CRAWL)
@@ -27,6 +29,7 @@ from .mixins import ExtractorMixin
 from .utils import SimpleArchive, Data, write_storage_file, move_to_storage
 from .signals import post_scrape
 from .extractor import Extractor
+
 try:
     xrange
 except NameError:
@@ -45,14 +48,16 @@ class Spider(ExtractorMixin, models.Model):
     # Link to different pages, all are XPath
     expand_links = JSONField(
         help_text=_('List of links (as XPaths) to other pages holding target '
-                    'links (will not be extracted)'))
+                    'links (will not be extracted)'),
+        validators=[XPathListValidator(_("Please enter a list of XPaths."))]
+    )
     crawl_depth = models.PositiveIntegerField(
         default=1,
         help_text=_('Set this > 1 in case of crawling from this page'))
     headers = JSONField(
         verbose_name=_("Headers"),
         help_text=_("Custom headers for downloads"),
-        null=True, blank=True)
+        null=True, blank=True, validators=[DictValidator()])
     proxies = models.ManyToManyField(
         'ProxyServer', verbose_name=_("proxy servers"), blank=True)
 
@@ -225,15 +230,22 @@ class CrawlUrl(models.Model):
                            help_text=_("Base url for the crawled target. "
                                        "Placeholder {0} could be used if "
                                        "url patterns is given."))
-    number_pattern = JSONField(verbose_name=_("URL number pattern"),
-                               help_text=_("Number pattern must be in"
-                                           "(start, stop, step) format."),
-                               null=True, blank=True)
-    text_pattern = JSONField(verbose_name=_("URL text pattern"),
-                             help_text=_("Define a list of texts that will be "
-                                         "replaced for placeholder {0} to "
-                                         "generate crawling URLs."),
-                             null=True, blank=True)
+    number_pattern = JSONField(
+        verbose_name=_("URL number pattern"),
+        help_text=_("Number pattern must be in"
+                    "(start, stop, step) format."),
+        null=True, blank=True,
+        validators=[NumberPatternValidator(
+            message=_("Number pattern must be in format (start, stop, step)."))]
+    )
+    text_pattern = JSONField(
+        verbose_name=_("URL text pattern"),
+        help_text=_("Define a list of texts that will be "
+                    "replaced for placeholder {0} to "
+                    "generate crawling URLs."),
+        null=True, blank=True,
+        validators=[ListValidator(text_type,
+                                  _("Please enter a list of texts."))])
     spider = models.ForeignKey(Spider, verbose_name=_("Spider"),
                                related_name="urls")
 
@@ -266,7 +278,7 @@ class DataItem(models.Model):
         max_length=512, verbose_name=_("Base XPath"),
         help_text=_("Base XPath to target's data container in page. Empty "
                     "means whole document."),
-        null=True, blank=True)
+        null=True, blank=True, validators=[XPathValidator()])
     spider = models.ForeignKey(Spider, verbose_name=_("Spider"),
                                related_name="data_items")
 
@@ -285,7 +297,7 @@ class Collector(models.Model):
         help_text=_("Relative xpath from DataItem's base to the link that "
                     "contains data's information. Empty means information "
                     "is inside base."),
-        null=True, blank=True)
+        null=True, blank=True, validators=[XPathValidator()])
     get_image = models.BooleanField(
         default=True,
         help_text=_('Download images found inside extracted content'))
@@ -315,7 +327,11 @@ class Selector(models.Model):
     collector = models.ForeignKey(
         Collector, verbose_name=_("parent collector"), related_name="selectors")
     key = models.SlugField()
-    xpath = models.CharField(max_length=512)
+    xpath = models.CharField(
+        max_length=512,
+        verbose_name=_("XPath to the HTML element that contains data."),
+        validators=[XPathValidator()]
+    )
     attribute = models.CharField(
         max_length=50, verbose_name=_("attribute"),
         help_text=_("Name of collector's attribute. If given, collector's "
@@ -323,16 +339,21 @@ class Selector(models.Model):
                     "content."),
         null=True, blank=True)
     data_type = models.CharField(max_length=64, choices=DATA_TYPES)
-    required_words = JSONField(verbose_name=_("Required words"),
-                               help_text=_("Only store item if value returned "
-                                           "by this selector contains given "
-                                           "words."),
-                               null=True, blank=True)
-    black_words = JSONField(verbose_name=_("Black words"),
-                            help_text=_("Skip item if value returned by this "
-                                        "selector contains one of given words."
-                                        ),
-                            null=True, blank=True)
+    required_words = JSONField(
+        verbose_name=_("Required words"),
+        help_text=_("Only store item if value returned by this selector "
+                    "contains given words."),
+        null=True, blank=True,
+        validators=[RequiredWordsValidator(
+            _("Required words must be a list of texts or a list of text lists.")
+        )])
+    black_words = JSONField(
+        verbose_name=_("Black words"),
+        help_text=_("Skip item if value returned by this selector contains one "
+                    "of given words."),
+        null=True, blank=True,
+        validators=[ListValidator(text_type,
+                                  _("Black words must be a list of texts."))])
 
     def __str__(self):
         return _('Selector: {0} - Collector: {1}').format(
