@@ -21,7 +21,8 @@ from django.utils.timezone import now
 
 from scraper.runner import SpiderRunner
 from scraper.validators import ListValidator, DictValidator, XPathListValidator, \
-    NumberPatternValidator, XPathValidator, RequiredWordsValidator
+    NumberPatternValidator, XPathValidator, RequiredWordsValidator, \
+    ChoicesValidator
 from .config import (
     DATA_TYPES, PROTOCOLS, INDEX_JSON, COMPRESS_RESULT, TEMP_DIR,
     NO_TASK_PREFIX, CRAWL_ROOT, WORK_MODE_CHOICES, MODE_CRAWL)
@@ -44,7 +45,9 @@ class Spider(ExtractorMixin, models.Model):
     to another page and continue finding."""
     name = models.CharField(max_length=256, blank=True, null=True)
     mode = models.CharField(
-        max_length=32, choices=WORK_MODE_CHOICES, default=MODE_CRAWL)
+        max_length=32, choices=WORK_MODE_CHOICES, default=MODE_CRAWL,
+        validators=[ChoicesValidator(WORK_MODE_CHOICES)]
+    )
     # Link to different pages, all are XPath
     expand_links = JSONField(
         help_text=_('List of links (as XPaths) to other pages holding target '
@@ -338,7 +341,9 @@ class Selector(models.Model):
                     "attribute will be returned instead of collector's "
                     "content."),
         null=True, blank=True)
-    data_type = models.CharField(max_length=64, choices=DATA_TYPES)
+    data_type = models.CharField(
+        max_length=64, choices=DATA_TYPES,
+        validators=[ChoicesValidator(DATA_TYPES)])
     required_words = JSONField(
         verbose_name=_("Required words"),
         help_text=_("Only store item if value returned by this selector "
@@ -441,8 +446,9 @@ class ProxyServer(models.Model):
     name = models.CharField(_('Proxy Server Name'), max_length=64)
     address = models.CharField(_('Address'), max_length=128)
     port = models.IntegerField(_('Port'))
-    protocol = models.CharField(_('Protocol'), choices=PROTOCOLS,
-                                max_length=16)
+    protocol = models.CharField(
+        _('Protocol'), choices=PROTOCOLS, max_length=16,
+        validators=[ChoicesValidator(PROTOCOLS)])
 
     def get_dict(self):
         return {self.protocol: '%s://%s:%d' % (

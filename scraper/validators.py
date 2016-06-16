@@ -1,5 +1,6 @@
 from __future__ import unicode_literals
 
+from django import forms
 from django.utils.deconstruct import deconstructible
 from lxml import etree
 from six import text_type
@@ -115,3 +116,14 @@ class RequiredWordsValidator(ListValidator):
                     if not isinstance(element, text_type):
                         raise ValidationError(self.get_message(),
                                               "invalid_required_words")
+
+
+class ChoicesValidator(object):
+    """A validator that validates if given value is a valid choice or not."""
+    def __init__(self, choices=[]):
+        self.field = forms.ChoiceField(choices=choices)
+
+    def __call__(self, value):
+        # Use ChoiceField's validation to validate
+        self.field.validate(value)
+
