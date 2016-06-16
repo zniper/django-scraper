@@ -14,7 +14,8 @@ from lxml import etree
 from readability.readability import Document
 
 from .config import DEFAULT_REPLACE_RULES, custom_loader, INVALID_DATA
-from .utils import complete_url, get_uuid, get_link_info, get_content, DATA_TEXT
+from .utils import (
+    complete_url, get_uuid, get_link_info, get_content, DATA_TEXT)
 
 logger = logging.getLogger(__name__)
 
@@ -238,8 +239,8 @@ class Extractor(object):
                     if not deferred_download:
                         for element in elements:
                             images.extend(self.extract_images(element))
-                        # Image's src has been modified, so we need to get content
-                        # again.
+                        # Image's src has been modified, so we need to get
+                        # content again.
                         extracted_contents = get_content(elements, data_type)
                     else:
                         # If deferred_download, add file's url to
@@ -284,8 +285,8 @@ class Extractor(object):
             ipath = img.get('src')
             file_name = self.download_file(ipath)
             if file_name:
-                meta = {
-                    'caption': img.get('alt', "") or img.get("title", "") or ""}
+                caption = img.get('alt', "") or img.get("title", "") or ""
+                meta = {'caption': caption}
                 new_ipath = os.path.join(self._uuid, file_name)
                 img.set('src', new_ipath)
                 imeta.append((file_name, meta))

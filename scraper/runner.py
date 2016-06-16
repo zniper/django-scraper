@@ -287,11 +287,11 @@ class ListingPage(Page):
         """
         for key in item:
             if isinstance(item[key], dict):
-                if not key in result:
+                if key not in result:
                     result[key] = {}
                 self.merge_data(result[key], item[key])
             elif isinstance(item[key], list):
-                if not key in result:
+                if key not in result:
                     result[key] = []
                 result[key] += item[key]
             else:
@@ -352,7 +352,8 @@ class DetailedPage(Page):
     """A detailed page where ItemData's information resides in."""
 
     def __init__(self, runner, url, depth, source, **kwargs):
-        super(DetailedPage, self).__init__(runner, url, depth, source, **kwargs)
+        super(DetailedPage, self).__init__(
+            runner, url, depth, source, **kwargs)
         self.parent = kwargs.get("parent", None)
         self.collector = kwargs.get("collector", None)
         if self.parent:

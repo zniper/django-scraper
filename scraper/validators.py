@@ -106,7 +106,8 @@ class NumberPatternValidator(ListValidator):
 @deconstructible
 class RequiredWordsValidator(ListValidator):
     def __init__(self, message=""):
-        super(RequiredWordsValidator, self).__init__([text_type, list], message)
+        super(RequiredWordsValidator, self).__init__(
+            [text_type, list], message)
 
     def __call__(self, value):
         super(RequiredWordsValidator, self).__call__(value)
@@ -127,4 +128,3 @@ class ChoicesValidator(object):
     def __call__(self, value):
         # Use ChoiceField's validation to validate
         self.field.validate(value)
-
