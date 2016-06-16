@@ -17,22 +17,17 @@ from django.utils.translation import ugettext_lazy as _
 
 from lxml import etree
 
-from runner import Page, ListingPage, DetailedPage, SpiderRunner
+from scraper.runner import Page, ListingPage, DetailedPage, SpiderRunner
 from scraper import utils, models, config
 from scraper.config import INVALID_DATA, INDEX_JSON, TEMP_DIR, CRAWL_ROOT
 from scraper.extractor import Extractor
 
-DATA_URL = """https://raw.githubusercontent.com/zniper/django-scraper/master/scraper/test_data/"""
 DATA_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)),
-                        'test_data')
+                        'data')
 
 
 def get_path(file_name):
     return os.path.join(DATA_DIR, file_name)
-
-
-def get_url(file_name):
-    return os.path.join(DATA_URL, file_name)
 
 
 def exists(path):
@@ -147,18 +142,14 @@ class ExtractorLocalTests(TestCase):
             refined = self.extractor.refine_content(content, rules)
         self.assertEqual(content, refined)
 
-    def test_download_file(self):
-        FILE_URL = DATA_URL + 'simple_page.txt'
-        file_name = self.extractor.download_file(FILE_URL)
-        self.assertTrue(file_name.endswith(".txt"))
-
-    def test_download_file_failed(self):
-        FILE_URL = DATA_URL + 'not_exist.txt'
-        file_name = self.extractor.download_file(FILE_URL)
-        self.assertEqual(file_name, None)
-
 
 class ExtractorOnlineTests(LiveServerTestCase):
+
+    def get_url(self, path):
+        """Returns complete URL of live server to path."""
+        return self.live_server_url + os.path.join(
+            settings.TEST_DATA_URL, path)
+
     @classmethod
     def setUpClass(cls):
         super(ExtractorOnlineTests, cls).setUpClass()
@@ -185,6 +176,16 @@ class ExtractorOnlineTests(LiveServerTestCase):
                 "data_type": "text"
             },
         }
+
+    def test_download_file(self):
+        FILE_URL = self.get_url('yc/simple_page.txt')
+        file_name = self.extractor.download_file(FILE_URL)
+        self.assertTrue(file_name.endswith(".txt"))
+
+    def test_download_file_failed(self):
+        FILE_URL = self.get_url('yc/not_exist.txt')
+        file_name = self.extractor.download_file(FILE_URL)
+        self.assertEqual(file_name, None)
 
     def test_extract_content_basic(self):
         data, path = self.extractor.extract_content(self.selectors)
@@ -534,7 +535,7 @@ class ListingPageTests(LiveServerTestCase):
         self.assertEqual(collector_data["collector"], collector)
         self.assertEqual(collector_data["pages"], [])
         self.assertEqual(collector_data["links"],
-                         ['http://127.0.0.1:9999/test_data/yc/yc.a0.html'])
+                         ['http://127.0.0.1:9999/data/yc/yc.a0.html'])
 
     def test_get_collector_data_with_invalid_link(self):
         # Get collector with link
@@ -580,7 +581,7 @@ class ListingPageTests(LiveServerTestCase):
     def test_extract_data(self):
         data, expand_links = self.page.extract_data()
         self.assertEqual(expand_links,
-                         {'http://127.0.0.1:9999/test_data/yc/yc.1.html': 2})
+                         {'http://127.0.0.1:9999/data/yc/yc.1.html': 2})
         self.assertEqual(
             set(data.keys()),
             {'ContributorList', 'NON-YC-W15 BlogPost', 'YC-W15 BlogPost'})
@@ -661,7 +662,7 @@ class ListingPageTests(LiveServerTestCase):
     def test_get_link_from_element(self):
         element = self.base.xpath(self.collector.link)[0]
         link = self.page.get_link_from_element(element)
-        self.assertEqual(link, "http://127.0.0.1:9999/test_data/yc/yc.a0.html")
+        self.assertEqual(link, "http://127.0.0.1:9999/data/yc/yc.a0.html")
         # Invalid element
         self.assertIsNone(self.page.get_link_from_element(None))
         # Not http/https link
@@ -768,7 +769,7 @@ class SpiderRunnerTests(LiveServerTestCase):
             {'ContributorList', 'NON-YC-W15 BlogPost', 'YC-W15 BlogPost'})
 
 
-class SpiderTests(TestCase):
+class SpiderTests(LiveServerTestCase):
     fixtures = ["spider.json", "crawl_url.json", "collector.json",
                 "selector.json", "data_item.json"]
 
@@ -794,51 +795,8 @@ class SpiderTests(TestCase):
         else:
             return location
 
-    def test_crawl_content(self):
-        self.assertGreater(self.spider.pk, 0)
-        data = self.spider.crawl_content()
-        for p in data.extras['path']:
-            self.assertEqual(os.path.exists(p), True)
-        self.assertEqual(len(data.content), 3)
-        for key in data.content:
-            content = data.content[key]
-            self.assertNotIn('start', content)
-            self.assertNotIn('end', content)
-            self.assertNotIn('task', content)
-            self.assertNotIn('id', content)
-            self.assertIn('url', content)
-            self.assertIn('content', content)
-
-        for p in data.extras['path']:
-            if os.path.exists(p):
-                rmtree(p)
-
-    def test_perform_operation(self):
-        data = self.spider._perform(
-            action='get', target='links')
-        self.assertEqual(len(data.content), 74)
-        self.assertEqual(data.extras['action'], 'get')
-        self.assertEqual(data.extras['target'], 'links')
-
-    def test_operate(self):
-        operations = [
-            {'action': 'get', 'target': 'links'},
-            {'action': 'get', 'target': 'article'},
-        ]
-        TASK_ID = 'test-task-id'
-        result = self.spider.operate(operations, TASK_ID)
-        self.assertEqual(result.task_id, TASK_ID)
-        self.assertNotEqual(result.data['url'], '')
-        self.assertEqual(len(result.data['results']), 2)
-        self.assertEqual(len(result.data['results'][0]['content']), 74)
-        self.assertIsNone(result.other)
-
-    def test_operate_crawl(self):
-        operations = [
-            {'action': 'crawl', 'target': 'content'},
-        ]
-        self.spider._set_extractor(True)
-        result = self.spider.operate(operations, 'anything')
+    def test_crawl(self):
+        result = self.spider.start('anything')
         self.assertEqual(len(result.data['results']), 1)
         self.assertEqual(len(result.data['results'][0]['content']), 3)
         self.assertGreater(result.other.pk, 0)
@@ -851,13 +809,9 @@ class SpiderTests(TestCase):
             if storage.exists(path):
                 storage.delete(path)
 
-    def test_operate_crawl_zip(self):
+    def test_crawl_zip(self):
         models.COMPRESS_RESULT = True
-        operations = [
-            {'action': 'crawl', 'target': 'content'},
-        ]
-        self.spider._set_extractor(True)
-        result = self.spider.operate(operations, 'anything')
+        result = self.spider.start('anything')
         self.assertEqual(len(result.data['results']), 1)
         self.assertEqual(len(result.data['results'][0]['content']), 3)
         self.assertGreater(result.other.pk, 0)
@@ -866,7 +820,7 @@ class SpiderTests(TestCase):
         self.assertIn('.zip', path)
         self.assertEqual(storage.exists(path), True)
         zfile = ZipFile(join(storage.base_location, path))
-        self.assertEquals(len(zfile.namelist()), 6)
+        self.assertEquals(len(zfile.namelist()), 15)
 
         # Self cleanup
         if hasattr(storage, 'base_location'):
@@ -875,15 +829,11 @@ class SpiderTests(TestCase):
             if storage.exists(path):
                 storage.delete(path)
 
-    def test_operate_crawl_expand(self):
+    def test_crawl_expand(self):
         self.spider.crawl_depth = 2
-        operations = [
-            {'action': 'crawl', 'target': 'content'},
-        ]
-        self.spider._set_extractor(True)
-        result = self.spider.operate(operations, 'any-id')
+        result = self.spider.start('any-id')
         self.assertEqual(len(result.data['results']), 1)
-        self.assertEqual(len(result.data['results'][0]['content']), 5)
+        self.assertEqual(len(result.data['results'][0]['content']), 3)
         self.assertGreater(result.other.pk, 0)
 
         path = result.other.local_path

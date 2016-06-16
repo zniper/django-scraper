@@ -5,7 +5,6 @@ from jsonfield.fields import JSONField
 from shutil import rmtree
 
 import uuid
-import urlparse
 import itertools
 import os
 import logging
@@ -20,16 +19,16 @@ from django.utils.translation import ugettext_lazy as _
 from django.utils.timezone import now
 
 from scraper.runner import SpiderRunner
-from scraper.validators import ListValidator, DictValidator, XPathListValidator, \
-    NumberPatternValidator, XPathValidator, RequiredWordsValidator, \
-    ChoicesValidator
+from scraper.validators import (
+    ListValidator, DictValidator, XPathListValidator,
+    NumberPatternValidator, XPathValidator, RequiredWordsValidator,
+    ChoicesValidator)
 from .config import (
     DATA_TYPES, PROTOCOLS, INDEX_JSON, COMPRESS_RESULT, TEMP_DIR,
     NO_TASK_PREFIX, CRAWL_ROOT, WORK_MODE_CHOICES, MODE_CRAWL)
 from .mixins import ExtractorMixin
 from .utils import SimpleArchive, Data, write_storage_file, move_to_storage
 from .signals import post_scrape
-from .extractor import Extractor
 
 try:
     xrange
@@ -78,27 +77,10 @@ class Spider(ExtractorMixin, models.Model):
         return self._storage_location
 
     def get_proxy(self):
-        return self.proxy.get_dict() if self.proxy else None
+        return self.proxies.first() if self.proxies else None
 
     def get_ua(self):
         return self.headers.get('user-agent')
-
-    def _new_extractor(self, url, source=''):
-        """Return Extractor instance with given URL. If URL invalid, None will be
-        returned"""
-        splitted_url = urlparse.urlsplit(url)
-        if splitted_url.scheme and splitted_url.netloc:
-            extractor = Extractor(
-                url,
-                base_dir=os.path.join(TEMP_DIR, self.storage_location),
-                proxies=self.get_proxy(),
-                user_agent=self.get_ua(),
-                html=source
-            )
-            return extractor
-        else:
-            logger.error('Cannot get Extractor due to invalid URL: {0}'.format(
-                url))
 
     def get_root_urls(self):
         """Returns all root urls."""
@@ -120,9 +102,8 @@ class Spider(ExtractorMixin, models.Model):
         datum = self._perform(self.mode)
         data.add_result(datum)
         result = self.create_result(data.dict, self._task)
-        # Data should be finalized, but it's not really working now
-        # result.other = self._finalize(data)
-        # result.save()
+        result.other = self._finalize(data)
+        result.save()
         return result
 
     def _perform(self, action, **kwargs):
@@ -133,11 +114,6 @@ class Spider(ExtractorMixin, models.Model):
         # Content extracting needs some more refinements
         post_scrape.send(self.__class__, result=datum.json)
         return datum
-
-    def _set_extractor(self, force=False):
-        if force or self._extractor is None:
-            self.extractor = self._new_extractor(self.url)
-        return self.extractor
 
     def _crawl(self, **kwargs):
         """ Extract all found links then scrape those pages
@@ -177,7 +153,7 @@ class Spider(ExtractorMixin, models.Model):
         return res
 
     def _finalize(self, data):
-        """Should be called at final step in operate(). This finalizes and
+        """Should be called at final step of start(). This finalizes and
         move collected data to storage if having files downloaded"""
         logger.info('[{0}] Finalizing result'.format(self._task))
 
@@ -238,8 +214,9 @@ class CrawlUrl(models.Model):
         help_text=_("Number pattern must be in"
                     "(start, stop, step) format."),
         null=True, blank=True,
-        validators=[NumberPatternValidator(
-            message=_("Number pattern must be in format (start, stop, step)."))]
+        validators=[
+            NumberPatternValidator(message=_(
+                "Number pattern must be in format (start, stop, step)."))]
     )
     text_pattern = JSONField(
         verbose_name=_("URL text pattern"),
@@ -328,7 +305,9 @@ class Collector(models.Model):
 class Selector(models.Model):
     """docstring for DataCollector"""
     collector = models.ForeignKey(
-        Collector, verbose_name=_("parent collector"), related_name="selectors")
+        Collector,
+        verbose_name=_("parent collector"),
+        related_name="selectors")
     key = models.SlugField()
     xpath = models.CharField(
         max_length=512,
@@ -350,12 +329,13 @@ class Selector(models.Model):
                     "contains given words."),
         null=True, blank=True,
         validators=[RequiredWordsValidator(
-            _("Required words must be a list of texts or a list of text lists.")
+            _("Required words must be a list of texts or a list of text "
+              "lists.")
         )])
     black_words = JSONField(
         verbose_name=_("Black words"),
-        help_text=_("Skip item if value returned by this selector contains one "
-                    "of given words."),
+        help_text=_("Skip item if value returned by this selector contains "
+                    "one of given words."),
         null=True, blank=True,
         validators=[ListValidator(text_type,
                                   _("Black words must be a list of texts."))])

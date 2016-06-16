@@ -3,7 +3,7 @@
     "model": "scraper.crawlurl",
     "pk": 1,
     "fields": {
-        "base": "http://127.0.0.1:9999/test_data/yc/yc.0.html",
+        "base": "http://127.0.0.1:9999/data/yc/yc.0.html",
         "number_pattern": null,
         "text_pattern": null,
         "spider": 1
@@ -23,7 +23,7 @@
     "model": "scraper.crawlurl",
     "pk": 3,
     "fields": {
-        "base": "http://127.0.0.1:9999/test_data/yc/yc.0.html",
+        "base": "http://127.0.0.1:9999/data/yc/yc.0.html",
         "number_pattern": null,
         "text_pattern": null,
         "spider": 3

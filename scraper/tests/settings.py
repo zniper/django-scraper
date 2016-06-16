@@ -1,10 +1,7 @@
-import  os
-
-import scraper
+from os import path
 
 try:
     from logging import NullHandler
-
     null_handler = 'logging.NullHandler'
 except ImportError:
     null_handler = 'django.utils.log.NullHandler'
@@ -25,7 +22,7 @@ DATABASES = {
     }
 }
 
-ROOT_URLCONF = "test_settings.urls"
+ROOT_URLCONF = "scraper.tests.urls"
 
 INSTALLED_APPS = [
     "django.contrib.auth",
@@ -44,8 +41,8 @@ MIDDLEWARE_CLASSES = (
 SITE_ID = 1
 
 TEMPLATE_DIRS = [
-    os.path.abspath(os.path.join(
-        os.path.dirname(__file__), "scraper", "tests",
+    path.abspath(path.join(
+        path.dirname(__file__), "scraper", "tests",
         "templates")),
 ]
 
@@ -66,6 +63,11 @@ LOGGING = {
         },
     },
     'loggers': {
+        'django.request': {
+            'handlers': ['null'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
         'django.db.backends': {
             'handlers': ['null'],
             'propagate': False,
@@ -74,6 +76,5 @@ LOGGING = {
     }
 }
 
-TEST_DATA_URL = "/test_data/"
-
-TEST_DATA_DIR = scraper.__path__[0] + "/test_data/"
+TEST_DATA_URL = "/data/"
+TEST_DATA_DIR = path.join(path.dirname(__file__), "data/")
