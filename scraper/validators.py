@@ -118,6 +118,7 @@ class RequiredWordsValidator(ListValidator):
                                               "invalid_required_words")
 
 
+@deconstructible
 class ChoicesValidator(object):
     """A validator that validates if given value is a valid choice or not."""
     def __init__(self, choices=[]):
