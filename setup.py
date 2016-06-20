@@ -24,7 +24,7 @@ setup(
     install_requires=[
         'requests',
         'lxml',
-        'simplejson==3.6.5',
+        'simplejson',
         'django-jsonfield==0.9.13',
         'readability-lxml==0.5.1',
         'chardet==2.3.0',
