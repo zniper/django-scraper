@@ -1,12 +1,13 @@
 from __future__ import unicode_literals
 
+from six import text_type
+
 from django import forms
 from django.utils.deconstruct import deconstructible
 from lxml import etree
 
 from django.core.exceptions import ValidationError
 from django.utils.translation import ugettext_lazy as _
-from django.utils.six import text_type
 
 
 @deconstructible

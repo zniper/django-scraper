@@ -8,6 +8,7 @@ from os.path import join
 from shutil import rmtree
 from zipfile import ZipFile
 
+from django import VERSION
 from django.conf import settings
 from django.core.files.storage import default_storage as storage
 from django.test import TestCase, LiveServerTestCase
@@ -25,6 +26,8 @@ from scraper.extractor import Extractor
 DATA_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                         'data')
 
+PRIOR_18 = VERSION < (1, 8)
+
 
 def get_path(file_name):
     return os.path.join(DATA_DIR, file_name)
@@ -37,6 +40,28 @@ def exists(path):
         parent, name = path.rstrip('/').rsplit('/', 1)
         res = storage.listdir(parent)
         return name in res[0] or name in res[1]
+
+
+class BaseTestCase(TestCase):
+    """A base test case that solves fixtures setup issue on django prior to 1.8.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        super(BaseTestCase, cls).setUpClass()
+        if not PRIOR_18:
+            # Data should be setup once on class level to improve performance.
+            cls.setupData(cls)
+
+    def setUp(self):
+        super(BaseTestCase, self).setUp()
+        if PRIOR_18:
+            self.setupData(self)
+
+    @staticmethod
+    def setupData(self):
+        """Setup data for tests."""
+        pass
 
 
 class ProxyServerTests(TestCase):
@@ -144,17 +169,10 @@ class ExtractorLocalTests(TestCase):
 
 
 class ExtractorOnlineTests(LiveServerTestCase):
-
     def get_url(self, path):
         """Returns complete URL of live server to path."""
         return self.live_server_url + os.path.join(
             settings.TEST_DATA_URL, path)
-
-    @classmethod
-    def setUpClass(cls):
-        super(ExtractorOnlineTests, cls).setUpClass()
-        cls.yc_0_html_path = "{0}{1}yc/yc.0.html".format(
-            cls.live_server_url, settings.TEST_DATA_URL)
 
     @classmethod
     def tearDownClass(self):
@@ -169,6 +187,8 @@ class ExtractorOnlineTests(LiveServerTestCase):
                 os.remove(location)
 
     def setUp(self):
+        self.yc_0_html_path = "{0}{1}yc/yc.0.html".format(
+            self.live_server_url, settings.TEST_DATA_URL)
         self.extractor = Extractor(self.yc_0_html_path)
         self.selectors = {
             'post': {
@@ -266,15 +286,15 @@ class SpiderMock(object):
         self.expand_links = expand
 
 
-class CrawlUrlTests(TestCase):
+class CrawlUrlTests(BaseTestCase):
     """Tests for CrawlUrl model."""
 
     fixtures = ["spider.json", "crawl_url.json"]
 
-    @classmethod
-    def setUpClass(cls):
-        super(CrawlUrlTests, cls).setUpClass()
-        cls.spider = models.Spider.objects.get(pk=2)
+    @staticmethod
+    def setupData(self):
+        super(CrawlUrlTests, self).setupData(self)
+        self.spider = models.Spider.objects.get(pk=2)
 
     def test_create(self):
         """Test create a new CrawlUrl object."""
@@ -296,13 +316,13 @@ class CrawlUrlTests(TestCase):
                           'https://blog.ycombinator.com/?page=4'])
 
 
-class DataItemTests(TestCase):
+class DataItemTests(BaseTestCase):
     fixtures = ["spider.json"]
 
-    @classmethod
-    def setUpClass(cls):
-        super(DataItemTests, cls).setUpClass()
-        cls.spider = models.Spider.objects.get(pk=1)
+    @staticmethod
+    def setupData(self):
+        super(DataItemTests, self).setupData(self)
+        self.spider = models.Spider.objects.get(pk=1)
 
     def test_create(self):
         data_item = models.DataItem.objects.create(
@@ -314,15 +334,15 @@ class DataItemTests(TestCase):
                          "{0} - {1}".format(self.spider.name, data_item.name))
 
 
-class CollectorTests(TestCase):
+class CollectorTests(BaseTestCase):
     fixtures = ["spider.json", "data_item.json", "collector.json",
                 "selector.json"]
 
-    @classmethod
-    def setUpClass(cls):
-        super(CollectorTests, cls).setUpClass()
-        cls.spider = models.Spider.objects.get(pk=1)
-        cls.blog_item = models.DataItem.objects.get(pk=1)
+    @staticmethod
+    def setupData(self):
+        super(CollectorTests, self).setupData(self)
+        self.spider = models.Spider.objects.get(pk=1)
+        self.blog_item = models.DataItem.objects.get(pk=1)
 
     def test_create(self):
         collector = models.Collector.objects.create(
@@ -376,7 +396,7 @@ class SelectorTests(TestCase):
                                          })
 
 
-class GeneralPageTests(TestCase):
+class GeneralPageTests(BaseTestCase):
     """Tests for general page."""
 
     fixtures = ["spider.json"]
@@ -384,12 +404,15 @@ class GeneralPageTests(TestCase):
     @classmethod
     def setUpClass(cls):
         super(GeneralPageTests, cls).setUpClass()
-        cls.spider = models.Spider.objects.get(pk=2)
-        cls.runner = SpiderRunner(cls.spider, task_id="task-id")
-        cls.page_source = open(get_path(os.path.join('yc', 'yc.0.html')), 'r') \
-            .read()
-        cls.page = Page(cls.runner, "http://test.url",
-                        1, cls.page_source)
+
+    @staticmethod
+    def setupData(self):
+        super(GeneralPageTests, self).setupData(self)
+        self.spider = models.Spider.objects.get(pk=2)
+        self.runner = SpiderRunner(self.spider, task_id="task-id")
+        self.page_source = open(
+            get_path(os.path.join('yc', 'yc.0.html')), 'r').read()
+        self.page = Page(self.runner, "http://test.url", 1, self.page_source)
 
     def test_init_general_page(self):
         self.assertEqual(self.page.spider, self.spider)
@@ -411,16 +434,12 @@ class DetailedPageTests(LiveServerTestCase):
     fixtures = ["spider.json", "crawl_url.json", "collector.json",
                 "selector.json", "data_item.json"]
 
-    @classmethod
-    def setUpClass(cls):
-        super(DetailedPageTests, cls).setUpClass()
-        cls.yc_0_url = "{0}{1}yc/yc.0.html".format(
-            cls.live_server_url, settings.TEST_DATA_URL)
-        cls.yc_a0_url = "{0}{1}yc/yc.a0.html".format(
-            cls.live_server_url, settings.TEST_DATA_URL)
-
     def setUp(self):
         super(DetailedPageTests, self).setUp()
+        self.yc_0_url = "{0}{1}yc/yc.0.html".format(
+            self.live_server_url, settings.TEST_DATA_URL)
+        self.yc_a0_url = "{0}{1}yc/yc.a0.html".format(
+            self.live_server_url, settings.TEST_DATA_URL)
         self.spider = models.Spider.objects.get(pk=3)
         self.collector = models.Collector.objects.get(pk=2)
         self.runner = SpiderRunner(self.spider, task_id="task-id")
@@ -496,16 +515,12 @@ class ListingPageTests(LiveServerTestCase):
     fixtures = ["spider.json", "crawl_url.json", "collector.json",
                 "selector.json", "data_item.json"]
 
-    @classmethod
-    def setUpClass(cls):
-        super(ListingPageTests, cls).setUpClass()
-        cls.yc_0_url = "{0}{1}yc/yc.0.html".format(
-            cls.live_server_url, settings.TEST_DATA_URL)
-        cls.yc_a0_url = "{0}{1}yc/yc.a0.html".format(
-            cls.live_server_url, settings.TEST_DATA_URL)
-
     def setUp(self):
         super(ListingPageTests, self).setUp()
+        self.yc_0_url = "{0}{1}yc/yc.0.html".format(
+            self.live_server_url, settings.TEST_DATA_URL)
+        self.yc_a0_url = "{0}{1}yc/yc.a0.html".format(
+            self.live_server_url, settings.TEST_DATA_URL)
         self.spider = models.Spider.objects.get(pk=3)
         self.runner = SpiderRunner(self.spider, task_id="task-id")
         self.yc_0_source = open(
@@ -716,10 +731,6 @@ class SpiderRunnerTests(LiveServerTestCase):
 
     fixtures = ["spider.json", "crawl_url.json", "collector.json",
                 "selector.json", "data_item.json"]
-
-    @classmethod
-    def setUpClass(cls):
-        super(SpiderRunnerTests, cls).setUpClass()
 
     def setUp(self):
         super(SpiderRunnerTests, self).setUp()

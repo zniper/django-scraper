@@ -28,5 +28,6 @@ setup(
         'django-jsonfield==0.9.13',
         'readability-lxml==0.5.1',
         'chardet==2.3.0',
+        'six'
         ],
 )

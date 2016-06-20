@@ -9,12 +9,13 @@ import itertools
 import os
 import logging
 
+from six import python_2_unicode_compatible, text_type
+
 from django.core.files.storage import default_storage as storage
 from django.db import models
 from django.db.models.signals import pre_delete
 from django.dispatch.dispatcher import receiver
 from django.utils.encoding import force_text
-from django.utils.six import python_2_unicode_compatible, text_type
 from django.utils.translation import ugettext_lazy as _
 from django.utils.timezone import now
 
