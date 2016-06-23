@@ -7,9 +7,11 @@ class Command(NoArgsCommand):
     """ Crawl all active resources """
 
     def handle_noargs(self, **options):
-        spiders = Spider.objects.all()
-        operations = [
-            {'action': 'crawl', 'target': 'content'}
-        ]
+        spiders = Spider.objects.order_by("-id")[:1]
+        operations = {'action': 'crawl', 'target': 'content'}
+
         for spider in spiders:
-            spider.operate(operations)
+            spider.start(operations)
+            # runner = SpiderRunner(spider)
+            # data = runner.start()
+            # print json.dumps(data, indent=4)

@@ -404,7 +404,7 @@ class LocalContent(models.Model):
     def remove_files(self):
         """Remove all files in storage of this LocalContent instance"""
         self.fresh = False
-        if not storage.exists(self.local_path):
+        if not self.local_path or not storage.exists(self.local_path):
             return
         try:
             if os.path.isdir(self.local_path):
