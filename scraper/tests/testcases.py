@@ -85,7 +85,7 @@ def get_extractor(file_name, url=''):
 class ExtractorLocalTests(TestCase):
     yc_0_html = os.path.join('yc', 'yc.0.html')
     yc_0_html_path = get_path(yc_0_html)
-    yc_a0_html_path = get_path(os.path.join('yc', 'yc.a0.html'))
+    yc_a0_html_path = get_path(os.path.join('yc', 'yc.0.a0.html'))
 
     @classmethod
     def setUpClass(self):
@@ -438,7 +438,7 @@ class DetailedPageTests(LiveServerTestCase):
         super(DetailedPageTests, self).setUp()
         self.yc_0_url = "{0}{1}yc/yc.0.html".format(
             self.live_server_url, settings.TEST_DATA_URL)
-        self.yc_a0_url = "{0}{1}yc/yc.a0.html".format(
+        self.yc_a0_url = "{0}{1}yc/yc.0.a0.html".format(
             self.live_server_url, settings.TEST_DATA_URL)
         self.spider = models.Spider.objects.get(pk=3)
         self.collector = models.Collector.objects.get(pk=2)
@@ -446,7 +446,7 @@ class DetailedPageTests(LiveServerTestCase):
         yc_0_source = open(get_path(os.path.join('yc', 'yc.0.html')), 'r') \
             .read()
         self.yc_a0_source = open(
-            get_path(os.path.join('yc', 'yc.a0.html')), 'r').read()
+            get_path(os.path.join('yc', 'yc.0.a0.html')), 'r').read()
         self.listing_page = ListingPage(self.runner, self.yc_0_url, 1,
                                         yc_0_source)
         self.page = DetailedPage(self.runner, self.yc_a0_url, 2,
@@ -519,14 +519,14 @@ class ListingPageTests(LiveServerTestCase):
         super(ListingPageTests, self).setUp()
         self.yc_0_url = "{0}{1}yc/yc.0.html".format(
             self.live_server_url, settings.TEST_DATA_URL)
-        self.yc_a0_url = "{0}{1}yc/yc.a0.html".format(
+        self.yc_a0_url = "{0}{1}yc/yc.0.a0.html".format(
             self.live_server_url, settings.TEST_DATA_URL)
         self.spider = models.Spider.objects.get(pk=3)
         self.runner = SpiderRunner(self.spider, task_id="task-id")
         self.yc_0_source = open(
             get_path(os.path.join('yc', 'yc.0.html')), 'r').read()
         self.yc_a0_source = open(
-            get_path(os.path.join('yc', 'yc.a0.html')), 'r').read()
+            get_path(os.path.join('yc', 'yc.0.a0.html')), 'r').read()
         self.page = ListingPage(self.runner, self.yc_0_url, 1, self.yc_0_source)
         self.data_item = models.DataItem.objects.get(pk=3)
         self.base = self.page.extractor.xpath(self.data_item.base)[0]
@@ -550,7 +550,7 @@ class ListingPageTests(LiveServerTestCase):
         self.assertEqual(collector_data["collector"], collector)
         self.assertEqual(collector_data["pages"], [])
         self.assertEqual(collector_data["links"],
-                         ['http://127.0.0.1:9999/data/yc/yc.a0.html'])
+                         ['http://127.0.0.1:9999/data/yc/yc.0.a0.html'])
 
     def test_get_collector_data_with_invalid_link(self):
         # Get collector with link
@@ -615,19 +615,19 @@ class ListingPageTests(LiveServerTestCase):
         # Check YC-W15 BlogPost
         self.assertEqual(len(data["YC-W15 BlogPost"]), 2)
         self.assertEqual(len(data["YC-W15 BlogPost"][0]["media"]), 1)
-        self.assertIn("2669c715ecb8fa24f957ce7e3605f125697d50d0.html",
+        self.assertIn("4aabdc9a727c504a954520e2eb8799f4abbc2f72.html",
                       data["YC-W15 BlogPost"][0]["media"][0])
         self.assertEqual(data["YC-W15 BlogPost"][0]["images"],
-                         [('292ccf426955da481aecada2ea1022cca2c1438c.jpg',
+                         [('0eab00adb8c14e5bc19fb5866bbcb703cf45ef17.jpg',
                            {'caption': ''})])
         self.assertEqual(data["YC-W15 BlogPost"][0]["content"]['title'],
                          ['Shift Messenger (YC W15) Makes It Easy For Workers '
                           'To Swap Hours'])
         self.assertEqual(len(data["YC-W15 BlogPost"][1]["media"]), 1)
-        self.assertIn("2c68001e37ac73a00cca98b8ecf28bdd246465f2.html",
+        self.assertIn("564fb5866004f351e8a3775ee22ed71cb107b3ed.html",
                       data["YC-W15 BlogPost"][1]["media"][0])
         self.assertEqual(data["YC-W15 BlogPost"][1]["images"],
-                         [('66b3db3eeb02a148a8618d65621683addc1812f8.png',
+                         [('463c7da3643b2ff6e31759b79a0ee75d65c7d911.png',
                            {'caption': ''})])
         self.assertEqual(data["YC-W15 BlogPost"][1]["content"]['title'],
                          [u'YesGraph (YC W15) Raises A Million To Build A '
@@ -650,7 +650,7 @@ class ListingPageTests(LiveServerTestCase):
         content = data["content"]
         self.assertEqual(set(content.keys()),
                          {"url", "content", "author", "title"})
-        self.assertEqual(content["url"], ['yc.a0.html'])
+        self.assertEqual(content["url"], ['yc.0.a0.html'])
         self.assertEqual(content["author"], ['Y Combinator'])
         self.assertEqual(content["title"],
                          ['Shift Messenger (YC W15) Makes It Easy For Workers '
@@ -677,7 +677,7 @@ class ListingPageTests(LiveServerTestCase):
     def test_get_link_from_element(self):
         element = self.base.xpath(self.collector.link)[0]
         link = self.page.get_link_from_element(element)
-        self.assertEqual(link, "http://127.0.0.1:9999/data/yc/yc.a0.html")
+        self.assertEqual(link, "http://127.0.0.1:9999/data/yc/yc.0.a0.html")
         # Invalid element
         self.assertIsNone(self.page.get_link_from_element(None))
         # Not http/https link
@@ -710,9 +710,9 @@ class ListingPageTests(LiveServerTestCase):
         data = item["data"]
         self.assertEqual(set(data.keys()), {'content', 'images', 'media'})
         self.assertEqual(data["images"],
-                         [('292ccf426955da481aecada2ea1022cca2c1438c.jpg',
+                         [('0eab00adb8c14e5bc19fb5866bbcb703cf45ef17.jpg',
                            {'caption': ''})])
-        self.assertIn('292ccf426955da481aecada2ea1022cca2c1438c.jpg',
+        self.assertIn('0eab00adb8c14e5bc19fb5866bbcb703cf45ef17.jpg',
                       data["content"]["content"][0])
 
     def test_write_index(self):
