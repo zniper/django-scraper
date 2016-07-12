@@ -3,4 +3,4 @@ global-exclude *.pyc
 include LICENSE
 include README.md
 include CHANGES.txt
-recursive-include scraper
+recursive-include scraper *
