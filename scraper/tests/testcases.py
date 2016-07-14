@@ -830,7 +830,7 @@ class SpiderTests(LiveServerTestCase):
         path = result.other.local_path
         self.assertIn('.zip', path)
         self.assertEqual(storage.exists(path), True)
-        zfile = ZipFile(join(storage.base_location, path))
+        zfile = ZipFile(storage.open(path))
         self.assertEquals(len(zfile.namelist()), 15)
 
         # Self cleanup
@@ -983,13 +983,10 @@ class MiscTests(TestCase):
             wfile.write('dummy')
         new_path = utils.move_to_storage(storage, location, 'tests')
         self.assertEqual(new_path, join('tests', 'test_misc'))
-        self.assertNotEqual(os.path.exists(location), True)
-        self.assertEqual(storage.exists(new_path), True)
-        self.assertEqual(storage.exists(join(new_path, 'empty_dir')), False)
-        self.assertEqual(storage.exists(join(new_path, 'normal_dir')), True)
-        self.assertEqual(
-            storage.exists(join(new_path, 'normal_dir/02.txt')), True)
-        self.assertEqual(storage.exists(join(new_path, '01.txt')), True)
+        self.assertFalse(os.path.exists(location))
+        self.assertFalse(storage.exists(join(new_path, 'empty_dir')))
+        self.assertTrue(storage.exists(join(new_path, 'normal_dir/02.txt')))
+        self.assertTrue(storage.exists(join(new_path, '01.txt')))
 
     def test_remove_local_files(self):
         file_path = join(config.TEMP_DIR, 'test_remove_local.txt')
