@@ -309,7 +309,7 @@ class Selector(models.Model):
         Collector,
         verbose_name=_("parent collector"),
         related_name="selectors")
-    key = models.SlugField()
+    key = models.CharField(max_length=200, verbose_name=_("key"))
     xpath = models.CharField(
         max_length=512,
         verbose_name=_("XPath to the HTML element that contains data."),

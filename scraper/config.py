@@ -57,7 +57,8 @@ custom_loader = None
 if SETTINGS.get('CUSTOM_LOADER', None):
     try:
         module_path = SETTINGS['CUSTOM_LOADER']
-        from django.utils.importlib import import_module
+        from django.utils.module_loading import import_module
         custom_loader = import_module(module_path)
     except:
+        print 'Cannot load module {0}'.format(module_path)
         logger.exception('Cannot load module {0}'.format(module_path))
