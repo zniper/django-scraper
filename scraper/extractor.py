@@ -29,9 +29,11 @@ class Extractor(object):
     headers = {}
 
     def __init__(self, url, base_dir='.', html='', proxies=None,
-                 user_agent=None):
+                 user_agent=None, tag_name='html'):
         self.proxies = proxies
         self.headers['User-Agent'] = user_agent if user_agent else ''
+        # tag_name is the tag name of input html.
+        self.tag_name = tag_name
         self.base_dir = base_dir
         self.load_source(url, html)
         self._location = self.location
@@ -101,6 +103,11 @@ class Extractor(object):
         else:
             self._html = '<html></html>'
         parser = etree.HTML(self._html)
+        # If tag name is given, remove some auto-generated wrappers.
+        if self.tag_name:
+            while len(parser.getchildren()) == 1 and \
+                            parser.tag != self.tag_name:
+                parser = parser.getchildren()[0]
         return parser
 
     @property

@@ -23,14 +23,14 @@ logger = logging.getLogger(__name__)
 class Page(object):
     """Hold information and logics for a crawled page."""
 
-    def __init__(self, runner, url, depth, source, **kwargs):
+    def __init__(self, runner, url, depth, source, tag_name='html', **kwargs):
         """Initialize a page object."""
         self.runner = runner
         self.spider = runner.spider
         self.url = url
         self.depth = depth
         self.source = source
-        self.extractor = Extractor(url, html=source,
+        self.extractor = Extractor(url, html=source, tag_name=tag_name,
                                    base_dir=self.runner.base_dir)
 
     def extract_data(self):
@@ -237,6 +237,7 @@ class ListingPage(Page):
                              url=self.url,
                              depth=self.depth,
                              source=etree.tounicode(base),
+                             tag_name=base.tag,
                              parent=self,
                              collector=collector)]
         else:
@@ -351,9 +352,9 @@ class ListingPage(Page):
 class DetailedPage(Page):
     """A detailed page where ItemData's information resides in."""
 
-    def __init__(self, runner, url, depth, source, **kwargs):
+    def __init__(self, runner, url, depth, source, tag_name='html', **kwargs):
         super(DetailedPage, self).__init__(
-            runner, url, depth, source, **kwargs)
+            runner, url, depth, source, tag_name, **kwargs)
         self.parent = kwargs.get("parent", None)
         self.collector = kwargs.get("collector", None)
         if self.parent:
