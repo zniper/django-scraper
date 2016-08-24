@@ -196,8 +196,8 @@ class Extractor(object):
             if data_type == 'binary':
                 for url in extracted_contents:
                     # The element must be string to downloadable target
-                    if not (isinstance(url, basestring) and url and
-                                url.strip()):
+                    if not (isinstance(url,
+                                       basestring) and url and url.strip()):
                         continue
                     if not deferred_download:
                         logger.info('Download media object: {0}'.format(url))
