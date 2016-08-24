@@ -130,7 +130,7 @@ class Extractor(object):
         for xpath in xpaths:
             for element in self.xpath(xpath):
                 link = get_link_info(element, make_root)
-                if link is None:
+                if link is None or link['url'] is None:
                     continue
                 url = link['url'].strip().rstrip('/').split('#', 1)[0]
                 scheme = urlparse.urlparse(url).scheme.lower()
@@ -196,7 +196,8 @@ class Extractor(object):
             if data_type == 'binary':
                 for url in extracted_contents:
                     # The element must be string to downloadable target
-                    if not (isinstance(url, basestring) and url.strip()):
+                    if not (isinstance(url, basestring) and url and
+                                url.strip()):
                         continue
                     if not deferred_download:
                         logger.info('Download media object: {0}'.format(url))
@@ -242,10 +243,13 @@ class Extractor(object):
                         return (INVALID_DATA, '')
 
                 # In case of getting image, put the HTML nodes into a list
-                if get_image and data_type == 'html':
-                    if not deferred_download:
+                if data_type == 'html':
+                    if not get_image or not deferred_download:
                         for element in elements:
-                            images.extend(self.extract_images(element))
+                            extracted_images = self.extract_images(
+                                element, get_image=get_image)
+                            if get_image:
+                                images.extend(extracted_images)
                         # Image's src has been modified, so we need to get
                         # content again.
                         extracted_contents = get_content(elements, data_type)
@@ -282,7 +286,7 @@ class Extractor(object):
         doc = Document(self._html)
         return {'title': doc.title(), 'content': doc.summary()}
 
-    def extract_images(self, element, *args, **kwargs):
+    def extract_images(self, element, get_image=True, *args, **kwargs):
         """Find all images inside given element and return those URLs"""
         # Download images if required
         imeta = []
@@ -290,13 +294,24 @@ class Extractor(object):
         logger.info('Download %d found image(s)' % len(images))
         for img in images:
             ipath = img.get('src')
-            file_name = self.download_file(ipath)
-            if file_name:
-                caption = img.get('alt', "") or img.get("title", "") or ""
-                meta = {'caption': caption}
-                new_ipath = os.path.join(self._uuid, file_name)
-                img.set('src', new_ipath)
+            caption = img.get('alt', "") or img.get("title", "") or ""
+            meta = {'caption': caption}
+            if get_image:
+                file_name = self.download_file(ipath)
+                if file_name:
+                    new_ipath = os.path.join(self._uuid, file_name)
+                    img.set('src', new_ipath)
                 imeta.append((file_name, meta))
+            else:
+                # Convert the image source from relative to absolute if
+                # necessary.
+                try:
+                    parsed = urlparse.urlparse(ipath)
+                except:
+                    parsed = None
+                if parsed and not parsed.scheme:
+                    img.set('src', urlparse.urljoin(self._url, ipath))
+                imeta.append((ipath, meta))
         return imeta
 
     def write_file(self, file_name, content):
@@ -346,10 +361,15 @@ class Extractor(object):
 
     def download_file(self, url):
         """ Download file from given url and save to common location """
-        file_url = url.strip()
+        file_url = url and url.strip()
 
-        if file_url.lower().find('http://') == -1:
+        if not file_url:
+            return
+
+        parsed = urlparse.urlparse(file_url)
+        if not parsed.scheme:
             file_url = urlparse.urljoin(self._url, file_url)
+
         lives = 3
         while lives:
             try:
@@ -364,6 +384,9 @@ class Extractor(object):
                     logger.error('Cannot downloading file %s' % url)
             except requests.ConnectionError:
                 logger.info('Retry downloading file: %s' % file_url)
+            except Exception as ex:
+                logger.error('Cannot downloading file {}. Got exception: {}'
+                             .format(url, ex))
             lives -= 1
         return None
 
