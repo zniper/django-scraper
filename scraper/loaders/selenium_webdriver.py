@@ -25,9 +25,9 @@ def get_source(url, headers=[], proxies=[]):
     firefox_binary = None
     if settings.SELENIUM_FIREFOX_BINARY:
         firefox_binary = FirefoxBinary(settings.SELENIUM_FIREFOX_BINARY)
+    driver = webdriver.Firefox(firefox_profile=get_profile(),
+                               firefox_binary=firefox_binary)
     try:
-        driver = webdriver.Firefox(firefox_profile=get_profile(),
-                                   firefox_binary=firefox_binary)
         driver.get(url)
         return driver.page_source
     except WebDriverException:
