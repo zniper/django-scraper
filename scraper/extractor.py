@@ -73,7 +73,7 @@ class Extractor(object):
                 'proxies': self.proxies
             }
             if custom_loader:
-                content = custom_loader.get_source(**arguments)
+                content = custom_loader.Loader(**arguments).load()
             else:
                 content = requests.get(**arguments).content
             return content

@@ -1,10 +1,13 @@
 import os
 import logging
 import urlparse
+
+import signal
 import simplejson as json
 import itertools
 import requests
 
+from copy import deepcopy
 from time import sleep
 from os.path import join
 from uuid import uuid4
@@ -19,7 +22,7 @@ from django.utils.functional import cached_property
 
 from .config import (
     custom_loader, DATETIME_FORMAT, CONCURRENT_DOWNLOADS, QUEUE_WAIT_PERIOD
-    )
+)
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +73,7 @@ class Datum(object):
     """Holds ouput of a single operation, supports export to JSON.
         ...
         extras - Holds non-result information"""
+
     def __init__(self, content, media=None, images=None, **kwargs):
         self.content = content
         self.media = media or []
@@ -109,7 +113,7 @@ def get_link_info(link, make_root=False):
     In case of having invalid URL, the function will return None
     """
     if isinstance(link, etree._Element):
-        href = link.get('href') if not make_root else '/'+link.get('href')
+        href = link.get('href') if not make_root else '/' + link.get('href')
         text = link.text.strip() if isinstance(link.text, basestring) else ''
         if href:
             return {'url': href.strip(), 'text': text}
@@ -118,8 +122,8 @@ def get_link_info(link, make_root=False):
 def get_single_content(element, data_type):
     """Return the processed content of given element"""
     if isinstance(element, basestring) or \
-       isinstance(element, etree._ElementStringResult) or \
-       isinstance(element, etree._ElementUnicodeResult):
+            isinstance(element, etree._ElementStringResult) or \
+            isinstance(element, etree._ElementUnicodeResult):
         return element
     if data_type == 'text':
         # Return element.text or ''
@@ -299,7 +303,7 @@ def interval_to_list(interval):
         [1, 2, 3, 4]
     """
     elements = [e.strip().split('-') for e in interval.split(',')]
-    return [n for r in elements for n in range(int(r[0]), int(r[-1])+1)]
+    return [n for r in elements for n in range(int(r[0]), int(r[-1]) + 1)]
 
 
 def generate_urls(base_url, elements=None):
@@ -328,48 +332,84 @@ def generate_urls(base_url, elements=None):
         yield base_url.format(*comb)
 
 
-def download_batch(urls, **kwargs):
+class DownloadThread(Thread):
+    """A thread that will handle downloading pages from a given queue of urls.
     """
-    Download multiple pages at same time, then returning a dict of page
-    content.
-        urls - ['http://first/page', 'http://second/page']
-        kwargs - Optional params to be transferred to worker
-    Returns:
-        {
-            'http://first/page': 'page content...',
-            'http://second/page': 'page content 2...'
-        }
-    """
-    results = {}
-    if urls:
-        url_queue = Queue()
-        [url_queue.put(url) for url in urls]
-        for i in xrange(min(len(urls), CONCURRENT_DOWNLOADS)):
-            worker = Thread(target=download_worker,
-                            args=(url_queue, results))
-            worker.setDaemon(True)
-            worker.start()
-        while url_queue.unfinished_tasks:
+
+    def __init__(self, queue, results, *args, **kwargs):
+        """
+        Initialize the thread
+        Args:
+            queue: a Queue object with urls inside.
+            results: Dictionary for holding downloaded sources.
+        """
+        self.queue = queue
+        self.results = results
+        self.kwargs = kwargs
+        self.loader = None
+        super(DownloadThread, self).__init__(**kwargs)
+
+    def run(self):
+        """Keep waiting and perform download when having url inside queue.
+        """
+        while not self.queue.empty():
+            url = self.queue.get()
+            kwargs = deepcopy(self.kwargs)
+            try:
+                kwargs['url'] = url
+                if custom_loader:
+                    self.loader = custom_loader.Loader(**kwargs)
+                    content = self.loader.load()
+                else:
+                    content = requests.get(**kwargs).content
+                self.results[url] = content
+            except:
+                logger.exception('Unable to browse \'{0}\''.format(url))
+            self.queue.task_done()
+
+
+class BatchDownloader(object):
+    """Handle multi-threaded page downloading."""
+
+    def __init__(self, urls, **kwargs):
+        """Initialize the downloader.
+        Args:
+            urls: a list of urls that will be downloaded.
+            **kwargs: optional params to be transferred to worker
+        """
+        self.urls = urls
+        self.kwargs = kwargs
+        self.concurrent = kwargs.get('concurrent') or CONCURRENT_DOWNLOADS
+        self.queue = Queue()
+        [self.queue.put(url) for url in self.urls]
+        self.results = {}
+        self.threads = []
+        signal.signal(signal.SIGTERM, self.exit_gracefully)
+
+    def exit_gracefully(self, signal, *args, **kwargs):
+        """Stop all of the threads by emptying the queue."""
+        # Empty the queue
+        if not self.queue.empty():
+            self.queue.queue.clear()
+
+    def download(self):
+        """ Returns a dict of page content.
+        Returns: {
+                     'http://first/page': 'page content...',
+                    'http://second/page': 'page content 2...'
+                 }
+        """
+        for i in range(min(len(self.urls), CONCURRENT_DOWNLOADS)):
+            thread = DownloadThread(self.queue, self.results, **self.kwargs)
+            thread.setDaemon(True)
+            thread.start()
+            self.threads.append(thread)
+        while self.queue.unfinished_tasks:
             sleep(QUEUE_WAIT_PERIOD)
-    return results
+        return self.results
 
 
-def download_worker(queue, results, **kwargs):
-    """
-    Keep waiting and perform download when having url inside queue.
-        queue - Queue object with URLs inside
-        results - Dictionary for holding downloaded sources
-        ...
-    """
-    while not queue.empty():
-        url = queue.get()
-        try:
-            kwargs['url'] = url
-            if custom_loader:
-                content = custom_loader.get_source(**kwargs)
-            else:
-                content = requests.get(**kwargs).content
-            results[url] = content
-        except:
-            logger.exception('Unable to browse \'{0}\''.format(url))
-        queue.task_done()
+def download_batch(urls, **kwargs):
+    """Download the given urls and returns a dictionary of results."""
+    downloader = BatchDownloader(urls, **kwargs)
+    return downloader.download()
